@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Scribble Multiplayer</title>
     <style>
-        :root { --bg-color: #38405e; --panel-bg: #fff; --accent: #4b79cf; }
+        :root { --bg-color: #38405e; --panel-bg: #fff; --accent: #4b79cf; --ghost-body: rgba(255,255,255,0.9); --ghost-border: rgba(0,0,0,0.2); --ghost-eye: #333; --ghost-h: 20px; --ghost-badge-h: 16px; --ghost-leg-offset: -3px; }
         body { margin: 0; background-color: var(--bg-color); height: 100vh; font-family: sans-serif; overflow: hidden; display: flex; flex-direction: column; align-items: center; }
 
         /* OVERLAYS */
@@ -28,7 +28,9 @@
 
         /* PLAYER LIST */
         #player-list { width: 200px; background: var(--panel-bg); border-radius: 8px; padding: 10px; overflow-y: auto; }
-        .player-card { background: #eee; padding: 8px; border-radius: 4px; display: flex; justify-content: space-between; margin-bottom: 5px; }
+        .player-card { background: #eee; padding: 8px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+        .player-meta { display: flex; align-items: center; gap: 6px; min-width: 0; }
+        .player-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .player-card.is-drawer { border: 2px solid #ff9800; background: #fff3e0; }
 
         /* MAIN CANVAS */
@@ -69,6 +71,73 @@
 
         .hidden { display: none !important; }
         .disabled-ui { opacity: 0.5; pointer-events: none; }
+
+        /* CURSOR GHOSTS */
+        #cursor-layer { position: fixed; inset: 0; pointer-events: none; z-index: 900; }
+        .cursor-ghost { position: fixed; left: 0; top: 0; transform: translate(-50%, -50%); display: flex; align-items: center; gap: 6px; opacity: 0.55; transition: opacity 0.15s ease; }
+        .cursor-ghost.is-drawer { opacity: 0.85; }
+        .cursor-name { background: rgba(0,0,0,0.65); color: #fff; font-size: 11px; padding: 2px 6px; border-radius: 10px; max-width: 140px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        .ghost,
+        .ghost-badge { background: var(--ghost-body); border: 1px solid var(--ghost-border); border-radius: 9px 9px 6px 6px; position: relative; display: inline-block; }
+        .cursor-ghost .ghost { width: 18px; height: var(--ghost-h); box-shadow: 0 2px 6px rgba(0,0,0,0.2); animation: ghost-float 2.4s ease-in-out infinite; }
+        .ghost-badge { width: 14px; height: var(--ghost-badge-h); box-shadow: 0 1px 3px rgba(0,0,0,0.2); animation: ghost-float 3.6s ease-in-out infinite; }
+
+        .ghost[data-height="short"],
+        .ghost-badge[data-height="short"] { --ghost-h: 16px; --ghost-badge-h: 13px; --ghost-leg-offset: -2px; }
+        .ghost[data-height="tall"],
+        .ghost-badge[data-height="tall"] { --ghost-h: 24px; --ghost-badge-h: 20px; --ghost-leg-offset: -4px; }
+
+        .eyes { position: absolute; background: var(--ghost-eye); border-radius: 50%; }
+        .ghost .eyes { top: 7px; left: 4px; width: 3px; height: 3px; box-shadow: 6px 0 0 var(--ghost-eye); }
+        .ghost-badge .eyes { top: 5px; left: 3px; width: 2px; height: 2px; box-shadow: 5px 0 0 var(--ghost-eye); }
+
+        .ghost-legs { position: absolute; left: 1px; right: 1px; bottom: var(--ghost-leg-offset); display: flex; justify-content: space-between; padding: 0 2px; gap: 1px; }
+        .ghost-legs .leg { background: var(--ghost-body); border: 1px solid var(--ghost-border); border-top: none; border-radius: 0 0 6px 6px; transform-origin: top; animation: ghost-leg 1.6s ease-in-out infinite; }
+        .ghost-legs .leg-left { animation-delay: 0s; }
+        .ghost-legs .leg-middle { animation-delay: 0.08s; }
+        .ghost-legs .leg-right { animation-delay: 0.16s; }
+        .ghost .ghost-legs .leg { width: 6px; height: 7px; }
+        .ghost-badge .ghost-legs .leg { width: 5px; height: 6px; }
+
+        .ghost[data-legs="stubby"] .ghost-legs .leg,
+        .ghost-badge[data-legs="stubby"] .ghost-legs .leg { height: 4px; }
+        .ghost[data-legs="long"] .ghost-legs .leg,
+        .ghost-badge[data-legs="long"] .ghost-legs .leg { height: 9px; border-radius: 0 0 8px 8px; }
+        .ghost[data-legs="wavy"] .ghost-legs .leg,
+        .ghost-badge[data-legs="wavy"] .ghost-legs .leg { width: 7px; height: 6px; border-radius: 0 0 10px 10px; animation-duration: 1.1s; }
+        .ghost[data-legs="float"] .ghost-legs,
+        .ghost-badge[data-legs="float"] .ghost-legs { display: none; }
+
+        @keyframes ghost-float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-2px); }
+        }
+        @keyframes ghost-leg {
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            50% { transform: translateY(1px) rotate(2deg); }
+        }
+        .ghost-preview { width: 140px; height: 100px; margin: 10px auto 6px; border-radius: 12px; border: 1px solid #ddd; background: #f8f8f8; display: flex; align-items: center; justify-content: center; }
+        .ghost-preview .ghost { width: 52px; height: 60px; border-radius: 24px 24px 12px 12px; }
+        .ghost-preview .ghost .eyes { top: 18px; left: 14px; width: 6px; height: 6px; box-shadow: 14px 0 0 var(--ghost-eye); }
+        .ghost-preview .ghost .ghost-legs { bottom: -5px; padding: 0 4px; }
+        .ghost-preview .ghost .ghost-legs .leg { width: 12px; height: 10px; }
+        .ghost-preview .ghost[data-legs="stubby"] .ghost-legs .leg { height: 6px; }
+        .ghost-preview .ghost[data-legs="long"] .ghost-legs .leg { height: 16px; }
+        .ghost-preview .ghost[data-legs="wavy"] .ghost-legs .leg { width: 16px; height: 10px; }
+        .ghost-preview .ghost[data-legs="float"] .ghost-legs { display: none; }
+        .ghost-preview .ghost[data-height="short"] { height: 50px; }
+        .ghost-preview .ghost[data-height="short"] .eyes { top: 14px; }
+        .ghost-preview .ghost[data-height="tall"] { height: 72px; }
+        .ghost-preview .ghost[data-height="tall"] .eyes { top: 22px; }
+
+        .ghost-picker { margin-top: 10px; }
+        .ghost-picker-title { font-size: 12px; color: #666; margin-bottom: 6px; }
+        .ghost-options { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+        .ghost-option { border: 1px solid #ddd; border-radius: 999px; background: #f8f8f8; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 6px 10px; gap: 6px; font-size: 12px; color: #2f2f2f; transition: border-color 0.12s ease, box-shadow 0.12s ease, transform 0.12s ease, color 0.12s ease, background 0.12s ease; }
+        .ghost-option.compact { width: 34px; height: 34px; padding: 0; border-radius: 10px; }
+        .ghost-swatch { width: 16px; height: 16px; border-radius: 50%; background: var(--ghost-body); border: 1px solid var(--ghost-border); }
+        .ghost-option.active { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(75,121,207,0.18); background: #fff; transform: translateY(-1px); color: #1b2a4d; }
     </style>
     <script src="/socket.io/socket.io.js"></script>
 </head>
@@ -79,6 +148,19 @@
         <div class="box">
             <h2>Enter Name</h2>
             <input type="text" id="username-input" placeholder="Nickname" maxlength="12" style="padding:10px; width:80%;">
+            <div id="ghost-preview" class="ghost-preview"></div>
+            <div class="ghost-picker">
+                <div class="ghost-picker-title">Choose your ghost</div>
+                <div id="ghost-options" class="ghost-options"></div>
+            </div>
+            <div class="ghost-picker">
+                <div class="ghost-picker-title">Choose your height</div>
+                <div id="height-options" class="ghost-options"></div>
+            </div>
+            <div class="ghost-picker">
+                <div class="ghost-picker-title">Choose your legs</div>
+                <div id="leg-options" class="ghost-options"></div>
+            </div>
             <button id="btn-play" class="word-btn" style="margin-top:10px;">Play!</button>
         </div>
     </div>
@@ -133,11 +215,11 @@
             <div id="canvas-helper">Scroll to resize - Shift to draw straight lines</div>
         </div>
 
-        <div id="chat-panel">
-            <div id="chat-messages"></div>
-            <div id="chat-input-area">
-                <input type="text" id="chat-input" placeholder="Type here...">
-                <div class="sound-controls" style="margin-top:8px;">
+    <div id="chat-panel">
+        <div id="chat-messages"></div>
+        <div id="chat-input-area">
+            <input type="text" id="chat-input" placeholder="Type here...">
+            <div class="sound-controls" style="margin-top:8px;">
                     <button id="btn-mute" type="button">Mute</button>
                     <input id="volume-slider" type="range" min="0" max="100" value="60" aria-label="Volume">
                 </div>
@@ -145,10 +227,18 @@
         </div>
     </div>
 
+    <div id="cursor-layer"></div>
+
 <script>
     const socket = io();
     const canvas = document.getElementById('drawing-board');
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const cursorLayer = document.getElementById('cursor-layer');
+    const cursorNodes = new Map();
+    const playerNames = new Map();
+    const playerGhosts = new Map();
+    const playerHeights = new Map();
+    const playerLegs = new Map();
 
     // --- SOUND ENGINE ---
     const Sound = (() => {
@@ -236,6 +326,34 @@
     window.addEventListener('pointerdown', () => Sound.prime(), { once: true });
     window.addEventListener('keydown', () => Sound.prime(), { once: true });
 
+    // --- GHOST THEMES ---
+    const ghostThemes = {
+        classic: { body: 'rgba(255,255,255,0.92)', border: 'rgba(0,0,0,0.2)', eye: '#333' },
+        mint: { body: '#d8fff2', border: '#6bb39b', eye: '#1f5c48' },
+        peach: { body: '#ffe2cf', border: '#c48a6f', eye: '#6b3a24' },
+        lilac: { body: '#eadfff', border: '#8e82c4', eye: '#3e3563' },
+        midnight: { body: '#3b3f55', border: '#151827', eye: '#c9d2ff' }
+    };
+    const heightThemes = {
+        short: { label: 'Short' },
+        standard: { label: 'Standard' },
+        tall: { label: 'Tall' }
+    };
+    const legThemes = {
+        classic: { label: 'Classic' },
+        long: { label: 'Long' },
+        stubby: { label: 'Stubby' },
+        wavy: { label: 'Wavy' },
+        float: { label: 'Float' }
+    };
+
+    const ghostThemeIds = Object.keys(ghostThemes);
+    const heightThemeIds = Object.keys(heightThemes);
+    const legThemeIds = Object.keys(legThemes);
+    let myGhostId = 'classic';
+    let myHeightId = 'standard';
+    let myLegsId = 'classic';
+
     // --- MULTIPLAYER STATE ---
     let myId = null;
     let isDrawer = false;
@@ -244,6 +362,132 @@
     let isGameRunning = false;
     let canStart = false;
     let hasSolved = false;
+
+    // --- CURSOR GHOSTS ---
+    const cursorPositions = new Map();
+    const CURSOR_SEND_MS = 40;
+    let lastCursorSendAt = 0;
+
+    function resolveGhostId(id) {
+        return ghostThemes[id] ? id : 'classic';
+    }
+
+    function resolveHeightId(id) {
+        return heightThemes[id] ? id : 'standard';
+    }
+
+    function resolveLegId(id) {
+        return legThemes[id] ? id : 'classic';
+    }
+
+    function applyGhostColors(el, ghostId) {
+        const theme = ghostThemes[resolveGhostId(ghostId)];
+        if (!theme) return;
+        el.style.setProperty('--ghost-body', theme.body);
+        el.style.setProperty('--ghost-border', theme.border);
+        el.style.setProperty('--ghost-eye', theme.eye);
+    }
+
+    function applyGhostLook(el, ghostId, heightId, legsId) {
+        const height = resolveHeightId(heightId);
+        const legs = resolveLegId(legsId);
+        applyGhostColors(el, ghostId);
+        el.dataset.height = height;
+        el.dataset.legs = legs;
+    }
+
+    function setCursorName(el, name) {
+        const label = el.querySelector('.cursor-name');
+        label.innerText = name || "Player";
+    }
+
+    function applyDrawerStyle(el, id) {
+        el.classList.toggle('is-drawer', id === currentDrawerId);
+    }
+
+    function buildGhostCore(className) {
+        const ghost = document.createElement('div');
+        ghost.className = className;
+
+        const eyes = document.createElement('div');
+        eyes.className = 'eyes';
+
+        const legs = document.createElement('div');
+        legs.className = 'ghost-legs';
+        const legLeft = document.createElement('span');
+        legLeft.className = 'leg leg-left';
+        const legMiddle = document.createElement('span');
+        legMiddle.className = 'leg leg-middle';
+        const legRight = document.createElement('span');
+        legRight.className = 'leg leg-right';
+        legs.appendChild(legLeft);
+        legs.appendChild(legMiddle);
+        legs.appendChild(legRight);
+
+        ghost.appendChild(eyes);
+        ghost.appendChild(legs);
+        return ghost;
+    }
+
+    function getOrCreateCursor(id) {
+        let el = cursorNodes.get(id);
+        if (el) return el;
+        el = document.createElement('div');
+        el.className = 'cursor-ghost';
+        el.dataset.id = id;
+
+        const ghost = buildGhostCore('ghost');
+
+        const name = document.createElement('div');
+        name.className = 'cursor-name';
+        name.innerText = playerNames.get(id) || 'Player';
+
+        el.appendChild(ghost);
+        el.appendChild(name);
+        cursorLayer.appendChild(el);
+        cursorNodes.set(id, el);
+        applyGhostLook(ghost, playerGhosts.get(id), playerHeights.get(id), playerLegs.get(id));
+        applyDrawerStyle(el, id);
+        return el;
+    }
+
+    function renderCursorPosition(id) {
+        const pos = cursorPositions.get(id);
+        if (!pos) return;
+        const el = getOrCreateCursor(id);
+        const x = Math.max(0, Math.min(1, pos.x)) * window.innerWidth;
+        const y = Math.max(0, Math.min(1, pos.y)) * window.innerHeight;
+        el.style.left = x + 'px';
+        el.style.top = y + 'px';
+    }
+
+    function updateCursorPosition(id, x, y) {
+        if (id === myId) return;
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+        cursorPositions.set(id, { x, y });
+        renderCursorPosition(id);
+    }
+
+    function removeCursor(id) {
+        const el = cursorNodes.get(id);
+        if (el) el.remove();
+        cursorNodes.delete(id);
+        cursorPositions.delete(id);
+    }
+
+    function refreshCursorNames() {
+        cursorNodes.forEach((el, id) => {
+            setCursorName(el, playerNames.get(id) || 'Player');
+            const ghost = el.querySelector('.ghost');
+            if (ghost) {
+                applyGhostLook(ghost, playerGhosts.get(id), playerHeights.get(id), playerLegs.get(id));
+            }
+        });
+    }
+
+    function refreshCursorDrawerState() {
+        cursorNodes.forEach((el, id) => applyDrawerStyle(el, id));
+    }
 
     // --- DRAWING STATE ---
     const state = {
@@ -289,6 +533,104 @@
 
     const PALETTE_SET = new Set(colors.map(hexToUint32));
 
+    let ghostPreviewGhost = null;
+
+    function renderGhostPreview() {
+        const container = document.getElementById('ghost-preview');
+        if (!container) return;
+        if (!ghostPreviewGhost) {
+            container.innerHTML = '';
+            ghostPreviewGhost = buildGhostCore('ghost');
+            container.appendChild(ghostPreviewGhost);
+        }
+        applyGhostLook(ghostPreviewGhost, myGhostId, myHeightId, myLegsId);
+    }
+
+    function setGhostSelection(id) {
+        myGhostId = resolveGhostId(id);
+        renderGhostPicker();
+        renderGhostPreview();
+    }
+
+    function setHeightSelection(id) {
+        myHeightId = resolveHeightId(id);
+        renderHeightPicker();
+        renderGhostPreview();
+    }
+
+    function setLegSelection(id) {
+        myLegsId = resolveLegId(id);
+        renderLegPicker();
+        renderGhostPreview();
+    }
+
+    function renderGhostPicker() {
+        const container = document.getElementById('ghost-options');
+        if (!container) return;
+        container.innerHTML = '';
+
+        ghostThemeIds.forEach(id => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'ghost-option compact' + (id === myGhostId ? ' active' : '');
+            btn.dataset.ghost = id;
+            btn.setAttribute('aria-label', `Ghost: ${id}`);
+            btn.title = id[0].toUpperCase() + id.slice(1);
+
+            const swatch = document.createElement('span');
+            swatch.className = 'ghost-swatch';
+            applyGhostColors(swatch, id);
+            btn.appendChild(swatch);
+
+            btn.addEventListener('click', () => setGhostSelection(id));
+            container.appendChild(btn);
+        });
+    }
+
+    function renderHeightPicker() {
+        const container = document.getElementById('height-options');
+        if (!container) return;
+        container.innerHTML = '';
+
+        heightThemeIds.forEach(id => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'ghost-option' + (id === myHeightId ? ' active' : '');
+            btn.dataset.height = id;
+            btn.setAttribute('aria-label', `Height: ${id}`);
+            btn.title = heightThemes[id]?.label || id;
+
+            const label = document.createElement('span');
+            label.innerText = heightThemes[id]?.label || id;
+            btn.appendChild(label);
+
+            btn.addEventListener('click', () => setHeightSelection(id));
+            container.appendChild(btn);
+        });
+    }
+
+    function renderLegPicker() {
+        const container = document.getElementById('leg-options');
+        if (!container) return;
+        container.innerHTML = '';
+
+        legThemeIds.forEach(id => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'ghost-option' + (id === myLegsId ? ' active' : '');
+            btn.dataset.legs = id;
+            btn.setAttribute('aria-label', `Legs: ${id}`);
+            btn.title = legThemes[id]?.label || id;
+
+            const label = document.createElement('span');
+            label.innerText = legThemes[id]?.label || id;
+            btn.appendChild(label);
+
+            btn.addEventListener('click', () => setLegSelection(id));
+            container.appendChild(btn);
+        });
+    }
+
     // --- INITIAL SETUP ---
     window.onload = () => {
         ctx.fillStyle = "#FFFFFF";
@@ -296,6 +638,10 @@
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
         setupPalette();
+        renderGhostPicker();
+        renderHeightPicker();
+        renderLegPicker();
+        renderGhostPreview();
         updateUI();
         saveHistory();
     };
@@ -305,7 +651,7 @@
     document.getElementById('btn-play').onclick = () => {
         const name = document.getElementById('username-input').value;
         Sound.prime();
-        socket.emit('join_game', name);
+        socket.emit('join_game', { name, ghost: myGhostId, height: myHeightId, legs: myLegsId });
         document.getElementById('login-overlay').classList.add('hidden');
     };
     document.getElementById('username-input').addEventListener('keypress', (e) => {
@@ -349,14 +695,45 @@
     socket.on('connect', () => { myId = socket.id; });
 
     socket.on('update_player_list', (players) => {
+        playerNames.clear();
+        playerGhosts.clear();
+        playerHeights.clear();
+        playerLegs.clear();
+        const activeIds = new Set();
         const list = document.getElementById('player-list');
         list.innerHTML = '';
         players.forEach(p => {
+            playerNames.set(p.id, p.name);
+            playerGhosts.set(p.id, resolveGhostId(p.ghost));
+            playerHeights.set(p.id, resolveHeightId(p.height));
+            playerLegs.set(p.id, resolveLegId(p.legs));
+            activeIds.add(p.id);
             const div = document.createElement('div');
             div.className = 'player-card' + (p.id === currentDrawerId ? ' is-drawer' : '');
-            div.innerHTML = `<span>${p.name}</span><b>${p.score}</b>`;
+            const meta = document.createElement('div');
+            meta.className = 'player-meta';
+
+            const badge = buildGhostCore('ghost-badge');
+            applyGhostLook(badge, p.ghost, p.height, p.legs);
+
+            const name = document.createElement('span');
+            name.className = 'player-name';
+            name.innerText = p.name;
+
+            meta.appendChild(badge);
+            meta.appendChild(name);
+
+            const score = document.createElement('b');
+            score.innerText = p.score;
+
+            div.appendChild(meta);
+            div.appendChild(score);
             list.appendChild(div);
         });
+        cursorNodes.forEach((_, id) => {
+            if (!activeIds.has(id)) removeCursor(id);
+        });
+        refreshCursorNames();
         updateStartButton();
     });
 
@@ -379,6 +756,7 @@
         hasSolved = false;
         document.getElementById('toolbar').classList.add('disabled-ui');
         resetRoundUI();
+        refreshCursorDrawerState();
         updateStartButton();
     });
 
@@ -441,6 +819,16 @@
 
     socket.on('canvas_snapshot', (dataUrl) => {
         applyCanvasSnapshot(dataUrl);
+    });
+
+    socket.on('cursor_update', (data) => {
+        if (!data) return;
+        updateCursorPosition(data.id, Number(data.x), Number(data.y));
+    });
+
+    socket.on('cursor_leave', (id) => {
+        if (!id) return;
+        removeCursor(id);
     });
 
     socket.on('word_hint', (data) => {
@@ -530,6 +918,7 @@
         if (isDrawer) toolbar.classList.remove('disabled-ui');
         else toolbar.classList.add('disabled-ui');
         if (!wasDrawer && isDrawer) resetHistoryToCurrent();
+        refreshCursorDrawerState();
     }
 
     function drawLine(x0, y0, x1, y1, c, s) {
@@ -554,6 +943,37 @@
         };
         img.src = dataUrl;
     }
+
+    // --- CURSOR INPUT ---
+
+    function sendCursorPosition(e) {
+        if (!socket.connected) return;
+        if (!myId || !playerNames.has(myId)) return;
+        const now = performance.now();
+        if (now - lastCursorSendAt < CURSOR_SEND_MS) return;
+        lastCursorSendAt = now;
+        const x = e.clientX / window.innerWidth;
+        const y = e.clientY / window.innerHeight;
+        socket.emit('cursor_update', { x, y });
+    }
+
+    function sendCursorLeave() {
+        if (!socket.connected) return;
+        socket.emit('cursor_leave');
+    }
+
+    window.addEventListener('pointermove', sendCursorPosition);
+    window.addEventListener('pointerdown', sendCursorPosition);
+    window.addEventListener('blur', sendCursorLeave);
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) sendCursorLeave();
+    });
+    document.addEventListener('mouseout', (e) => {
+        if (!e.relatedTarget && !e.toElement) sendCursorLeave();
+    });
+    window.addEventListener('resize', () => {
+        cursorPositions.forEach((_, id) => renderCursorPosition(id));
+    });
 
     // --- PALETTE UI ---
 

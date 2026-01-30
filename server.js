@@ -52,17 +52,27 @@ const WORD_LIST = [
     "TOAST", "TOOTH", "TORCH", "TOWER", "TRAIN", "TREE", "TRUCK", "TURTLE", "UMBRELLA", "VASE",
     "VIOLIN", "WATER", "WHALE", "WHEEL", "WIND", "WINDOW", "WING", "WOLF", "WOOD", "YOGURT", "ZEBRA"
 ];
+const GHOST_THEMES = new Set(["classic", "mint", "peach", "lilac", "midnight"]);
+const HEIGHT_THEMES = new Set(["short", "standard", "tall"]);
+const LEG_THEMES = new Set(["classic", "long", "stubby", "wavy", "float"]);
 
 // --- SOCKET LOGIC ---
 io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
 
     // 1. JOIN GAME
-    socket.on('join_game', (name) => {
+    socket.on('join_game', (payload) => {
+        const rawName = (typeof payload === "string") ? payload : payload?.name;
+        const ghostId = (typeof payload === "object") ? sanitizeGhostId(payload?.ghost) : null;
+        const heightId = (typeof payload === "object") ? sanitizeHeightId(payload?.height) : null;
+        const legsId = (typeof payload === "object") ? sanitizeLegId(payload?.legs) : null;
         players[socket.id] = {
             id: socket.id,
-            name: name || `Guest ${socket.id.substr(0,4)}`,
-            score: 0
+            name: rawName || `Guest ${socket.id.substr(0,4)}`,
+            score: 0,
+            ghost: ghostId || "classic",
+            height: heightId || "standard",
+            legs: legsId || "classic"
         };
         customUsed[socket.id] = false;
         if (!playerOrder.includes(socket.id)) playerOrder.push(socket.id);
@@ -122,6 +132,19 @@ io.on('connection', (socket) => {
     });
     socket.on('canvas_snapshot', (dataUrl) => {
         if (socket.id === drawerId) socket.broadcast.emit('canvas_snapshot', dataUrl);
+    });
+
+    // 2.5 CURSOR TRACKING
+    socket.on('cursor_update', (data) => {
+        const player = players[socket.id];
+        if (!player) return;
+        const x = Math.min(1, Math.max(0, Number(data?.x)));
+        const y = Math.min(1, Math.max(0, Number(data?.y)));
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+        socket.broadcast.emit('cursor_update', { id: socket.id, x, y });
+    });
+    socket.on('cursor_leave', () => {
+        socket.broadcast.emit('cursor_leave', socket.id);
     });
 
     // 3. WORD SELECTION
@@ -204,6 +227,7 @@ io.on('connection', (socket) => {
         if (idx !== -1) playerOrder.splice(idx, 1);
         if (hostId === socket.id) hostId = playerOrder[0] || null;
         io.emit('update_player_list', Object.values(players));
+        socket.broadcast.emit('cursor_leave', socket.id);
         if (socket.id === drawerId) endRound(); // End round if drawer leaves
         emitHostUpdate();
     });
@@ -357,6 +381,30 @@ function sanitizeCustomWord(input) {
         .trim();
     if (!cleaned) return null;
     if (cleaned.length < 1 || cleaned.length > 50) return null;
+    return cleaned;
+}
+
+function sanitizeGhostId(input) {
+    if (typeof input !== "string") return null;
+    const cleaned = input.toLowerCase().replace(/[^a-z0-9_-]/g, "");
+    if (!cleaned) return null;
+    if (!GHOST_THEMES.has(cleaned)) return null;
+    return cleaned;
+}
+
+function sanitizeHeightId(input) {
+    if (typeof input !== "string") return null;
+    const cleaned = input.toLowerCase().replace(/[^a-z0-9_-]/g, "");
+    if (!cleaned) return null;
+    if (!HEIGHT_THEMES.has(cleaned)) return null;
+    return cleaned;
+}
+
+function sanitizeLegId(input) {
+    if (typeof input !== "string") return null;
+    const cleaned = input.toLowerCase().replace(/[^a-z0-9_-]/g, "");
+    if (!cleaned) return null;
+    if (!LEG_THEMES.has(cleaned)) return null;
     return cleaned;
 }
 
