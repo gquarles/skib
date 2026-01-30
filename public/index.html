@@ -13,6 +13,11 @@
         .box { background: white; padding: 20px; border-radius: 10px; text-align: center; width: 300px; }
         .word-btn { display: block; width: 100%; padding: 10px; margin: 5px 0; background: var(--accent); color: white; border: none; cursor: pointer; border-radius: 4px; font-size: 16px; }
         .word-btn:hover { background: #3a63ad; }
+        .word-btn.word-option { display: flex; align-items: center; justify-content: space-between; gap: 8px; text-transform: uppercase; }
+        .difficulty-badge { font-size: 10px; padding: 2px 6px; border-radius: 999px; background: rgba(255,255,255,0.2); color: #fff; letter-spacing: 0.5px; }
+        .difficulty-badge.easy { background: #e0f4e8; color: #1a6b3b; }
+        .difficulty-badge.medium { background: #fff3d6; color: #8a5a00; }
+        .difficulty-badge.hard { background: #fde2e1; color: #9c2b2b; }
 
         /* HEADER */
         #header-bar { width: 100%; height: 60px; background: white; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.2); z-index: 10; margin-bottom: 20px; position: relative; }
@@ -865,20 +870,40 @@
         }
     }
 
+    function normalizeOptions(words) {
+        if (!Array.isArray(words)) return [];
+        return words.map(item => {
+            if (typeof item === 'string') return { word: item, difficulty: null };
+            const word = typeof item?.word === 'string' ? item.word : '';
+            const difficulty = typeof item?.difficulty === 'string' ? item.difficulty : null;
+            return { word, difficulty };
+        }).filter(opt => opt.word);
+    }
+
     function renderWordOptions(words, canCustom) {
         const overlay = document.getElementById('word-overlay');
         const container = document.getElementById('word-options');
-        lastWordOptions = Array.isArray(words) ? words.slice() : [];
+        lastWordOptions = normalizeOptions(words);
         lastCanCustom = !!canCustom;
         container.innerHTML = '';
 
-        lastWordOptions.forEach(word => {
+        lastWordOptions.forEach(opt => {
             const btn = document.createElement('button');
-            btn.className = 'word-btn';
-            btn.innerText = word;
+            btn.className = 'word-btn word-option';
+            const text = document.createElement('span');
+            text.innerText = opt.word;
+            btn.appendChild(text);
+
+            if (opt.difficulty) {
+                const badge = document.createElement('span');
+                badge.className = `difficulty-badge ${opt.difficulty}`;
+                badge.innerText = opt.difficulty;
+                btn.appendChild(badge);
+            }
+
             btn.onclick = () => {
                 Sound.wordPick();
-                socket.emit('word_chosen', word);
+                socket.emit('word_chosen', opt.word);
                 overlay.classList.add('hidden');
             };
             container.appendChild(btn);
@@ -886,7 +911,7 @@
 
         if (canCustom) {
             const btn = document.createElement('button');
-            btn.className = 'word-btn';
+            btn.className = 'word-btn word-option';
             btn.innerText = 'Custom word...';
             btn.onclick = () => {
                 const input = prompt('Enter a custom word (1-50 chars, letters/numbers/spaces).');

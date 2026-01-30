@@ -17,6 +17,7 @@ let guessedPlayers = []; // Track who guessed correctly this round
 let currentRound = 0;
 const TOTAL_ROUNDS = 5;
 let currentOptions = [];
+let currentDifficulty = "easy";
 let customUsed = {}; // { socketId: boolean }
 let hostId = null;
 let playerOrder = [];
@@ -24,34 +25,75 @@ let revealedIndices = new Set();
 let currentHintDisplay = "";
 let pendingHintTimes = new Set();
 
-const WORD_LIST = [
-    "AIR", "ALARM", "ALBUM", "ALIEN", "ANCHOR", "ANGEL", "APPLE", "ARM", "ARMOR", "ARROW",
-    "ART", "ATOM", "AVOCADO", "AXE", "BACKPACK", "BADGE", "BALLOON", "BANANA", "BAND", "BANK",
-    "BARREL", "BASKET", "BATH", "BEACH", "BEAK", "BEAN", "BEARD", "BED", "BEE", "BELL",
-    "BERRY", "BIKE", "BIRD", "BLANKET", "BLOOM", "BOAT", "BOLT", "BONE", "BOOK", "BOOT",
-    "BOTTLE", "BOX", "BRACELET", "BRANCH", "BREAD", "BRIDGE", "BRUSH", "BUBBLE", "BUCKET", "BURGER",
-    "BUTTON", "CABLE", "CAKE", "CAMERA", "CANDLE", "CANDY", "CANYON", "CAP", "CAPE", "CAR",
-    "CARD", "CARROT", "CASTLE", "CAT", "CAVE", "CHAIR", "CHEESE", "CHEF", "CHERRY", "CHEST",
-    "CLOCK", "CLOUD", "COAT", "COFFEE", "COIN", "COMET", "COMPASS", "COMPUTER", "COOKIE", "CORAL",
-    "CORN", "CROWN", "CRYSTAL", "CUP", "DANCE", "DART", "DEER", "DESERT", "DIAMOND", "DISH",
-    "DOG", "DOOR", "DRAGON", "DRUM", "DUCK", "EAGLE", "EAR", "EARTH", "EGG", "ENGINE",
-    "EYE", "FAN", "FEATHER", "FENCE", "FIRE", "FISH", "FLAG", "FLOWER", "FLUTE", "FOOD",
-    "FOREST", "FORK", "FOX", "FRAME", "FRUIT", "GARDEN", "GATE", "GHOST", "GIFT", "GLASS",
-    "GLOVE", "GOLD", "GRASS", "GRAPE", "GUITAR", "HAMMER", "HAT", "HEART", "HILL", "HONEY",
-    "HOOK", "HOUSE", "ICE", "ISLAND", "JAR", "JEWEL", "JUNGLE", "KEY", "KITE", "KNIFE",
-    "LADDER", "LAMP", "LANTERN", "LEAF", "LEMON", "LENS", "LETTER", "LIGHT", "LION", "LOCK",
-    "MAP", "MASK", "MEDAL", "MELON", "MILK", "MIRROR", "MOON", "MOUSE", "MUSIC", "NEST",
-    "NOSE", "OCEAN", "ONION", "ORANGE", "OWL", "PAINT", "PALM", "PAN", "PAPER", "PEACH",
-    "PEAR", "PENCIL", "PENGUIN", "PEPPER", "PHONE", "PIANO", "PILLOW", "PINE", "PIRATE", "PIZZA",
-    "PLANE", "PLANET", "PLANT", "PLATE", "PLUG", "POCKET", "POND", "POTATO", "PUMPKIN", "PUPPY",
-    "QUEEN", "QUIET", "RAIN", "RAINBOW", "RING", "RIVER", "ROBOT", "ROCKET", "ROPE", "ROSE",
-    "SADDLE", "SALAD", "SAND", "SCALE", "SCHOOL", "SCISSORS", "SEA", "SHEEP", "SHIP", "SHOE",
-    "SHOP", "SHOWER", "SIGN", "SKATE", "SKY", "SLED", "SMILE", "SMOKE", "SNAIL", "SNOW",
-    "SOCK", "SOUP", "SPIDER", "SPONGE", "SPOON", "STAR", "STONE", "STORE", "STREAM", "SUN",
-    "SUSHI", "SWAN", "SWORD", "TABLE", "TAXI", "TEA", "TEETH", "TEMPLE", "TENT", "TIGER",
-    "TOAST", "TOOTH", "TORCH", "TOWER", "TRAIN", "TREE", "TRUCK", "TURTLE", "UMBRELLA", "VASE",
-    "VIOLIN", "WATER", "WHALE", "WHEEL", "WIND", "WINDOW", "WING", "WOLF", "WOOD", "YOGURT", "ZEBRA"
+const EASY_WORDS = [
+    "APPLE", "BANANA", "ORANGE", "GRAPES", "LEMON", "PEACH", "PEAR", "CHERRY", "MELON", "BERRY",
+    "CARROT", "TOMATO", "POTATO", "ONION", "GARLIC", "BREAD", "TOAST", "PIZZA", "TACO", "SUSHI",
+    "SALAD", "COOKIE", "CUPCAKE", "DONUT", "CAKE", "PIE", "CANDY", "POPCORN", "HOT DOG", "BURGER",
+    "FRIES", "EGG", "PANCAKE", "WAFFLE", "CEREAL", "MILK", "JUICE", "COFFEE", "TEAPOT", "MUG",
+    "SPOON", "FORK", "KNIFE", "PLATE", "BOWL", "CUP", "BOTTLE", "CAT", "DOG", "FISH",
+    "BIRD", "HORSE", "COW", "PIG", "SHEEP", "GOAT", "MOUSE", "RABBIT", "TURTLE", "FROG",
+    "BEAR", "LION", "TIGER", "ZEBRA", "GIRAFFE", "ELEPHANT", "MONKEY", "PANDA", "KOALA", "DOLPHIN",
+    "SHARK", "WHALE", "OCTOPUS", "CRAB", "BUTTERFLY", "BEE", "ANT", "SPIDER", "SNAKE", "LIZARD",
+    "CHICKEN", "DUCK", "OWL", "EAGLE", "PENGUIN", "KANGAROO", "CAMEL", "HIPPO", "RHINO", "WOLF",
+    "FOX", "DEER", "RACCOON", "SQUIRREL", "HAMSTER", "HEDGEHOG", "BAT", "SUN", "MOON", "STAR",
+    "CLOUD", "RAIN", "SNOW", "WIND", "RAINBOW", "MOUNTAIN", "RIVER", "OCEAN", "LAKE", "TREE",
+    "FLOWER", "ROSE", "TULIP", "CACTUS", "LEAF", "GRASS", "ROCK", "VOLCANO", "ISLAND", "BEACH",
+    "FOREST", "DESERT", "WATERFALL", "FIRE", "ICE", "SNOWMAN", "TENT", "HOUSE", "CASTLE", "BRIDGE",
+    "ROAD", "SIGN", "FLAG", "GARDEN", "CHAIR", "TABLE", "COUCH", "BED", "PILLOW", "BLANKET",
+    "LAMP", "CLOCK", "PHONE", "CAMERA", "TV SET", "KEY", "LOCK", "DOOR", "WINDOW", "MIRROR",
+    "BUCKET", "SPONGE", "SOAP", "TOWEL", "TOOTHBRUSH", "HAT", "CAP", "SHOE", "BOOT", "SOCK",
+    "SHIRT", "PANTS", "DRESS", "JACKET", "GLOVE", "RING", "WATCH", "BACKPACK", "UMBRELLA", "BALL",
+    "KITE", "BOOK", "PEN", "PENCIL", "ERASER", "SCISSORS", "GIFT", "TOY", "DOLL", "ROBOT",
+    "CAR", "BUS", "BOAT", "BIKE", "TRUCK", "BALLOON", "HEART", "CIRCLE", "SQUARE", "TRIANGLE",
+    "SMILE", "LAUGH", "JUMP", "DANCE", "RUN", "SWIM", "SLEEP", "READ", "WRITE"
 ];
+
+const MEDIUM_WORDS = [
+    "FIRE TRUCK", "POLICE CAR", "TRAFFIC LIGHT", "STOP SIGN", "STREET MAP", "PARKING LOT", "ICE SKATES", "ROLLER SKATES", "SKATE PARK", "SOCCER BALL",
+    "SOCCER GOAL", "BASEBALL BAT", "BASEBALL GLOVE", "TENNIS RACKET", "PING PONG", "GOLF CLUB", "BOWLING BALL", "DART BOARD", "BASKETBALL HOOP", "HOCKEY STICK",
+    "BOXING GLOVES", "JUMP ROPE", "TREADMILL", "YOGA MAT", "SWIMMING POOL", "WATER SLIDE", "SAND CASTLE", "BEACH TOWEL", "SUN GLASSES", "RAIN COAT",
+    "SNOW BOOTS", "WINTER HAT", "LIFE JACKET", "FIRST AID", "BAND AID", "STETHOSCOPE", "DOCTOR", "NURSE", "FIREFIGHTER", "POLICE OFFICER",
+    "CHEF HAT", "WAITER", "SCHOOL BUS", "PLAYGROUND", "SAND BOX", "TREE HOUSE", "DOG LEASH", "CAT TOY", "FISH BOWL", "BIRD CAGE",
+    "HAMSTER WHEEL", "PET STORE", "ZOO MAP", "CIRCUS TENT", "TICKET BOOTH", "MOVIE THEATER", "POPCORN BAG", "MUSIC NOTE", "GUITAR PICK", "DRUM SET",
+    "PIANO KEYS", "VIOLIN", "TRUMPET", "SAXOPHONE", "HEADPHONES", "EARBUDS", "VIDEO GAME", "GAME CONSOLE", "REMOTE CONTROL", "COMPUTER MOUSE",
+    "KEYBOARD", "LAPTOP", "PHONE CHARGER", "POWER CORD", "LIGHT BULB", "EXTENSION CORD", "TOOL BOX", "HAMMER", "SCREWDRIVER", "WRENCH",
+    "PAINT BRUSH", "PAINT BUCKET", "TAPE MEASURE", "LADDER", "GARDEN HOSE", "LAWN MOWER", "FLOWER POT", "WATERING CAN", "SPRAY BOTTLE", "TRASH CAN",
+    "RECYCLE BIN", "WASHING MACHINE", "DISHWASHER", "MICROWAVE", "TOASTER", "BLENDER", "FRIDGE DOOR", "SHOPPING CART", "GROCERY BAG", "CASH REGISTER",
+    "CREDIT CARD", "GIFT CARD", "BIRTHDAY CAKE", "PARTY HAT", "CONFETTI", "WRAPPING PAPER", "BOW TIE", "NECK TIE", "SUITCASE", "PASSPORT",
+    "AIRPLANE WING", "TRAIN STATION", "BUS STOP", "GAS PUMP", "CAR WASH", "PARKING METER", "BIKE LOCK", "MOTORCYCLE", "HOT AIR BALLOON", "SPACESHIP",
+    "SATELLITE", "SPACE SUIT", "DIVING MASK", "SNORKEL", "FISHING ROD", "TACKLE BOX", "CAMP SITE", "CAMPFIRE", "SLEEPING BAG", "BACKPACK STRAP",
+    "HIKING BOOTS", "TRAIL SIGN", "MOUNTAIN BIKE", "SNOWBOARD", "SKI LIFT", "ICE RINK", "SURF BOARD", "WAVE POOL", "WATER BOTTLE", "THERMOS",
+    "LUNCH BOX", "BENTO BOX", "PICNIC TABLE", "PICNIC BASKET", "COFFEE SHOP", "TEA SHOP", "PIZZA BOX", "TAKEOUT", "FOOD TRUCK", "ICE CREAM CONE",
+    "DONUT SHOP", "BAKER", "BARBER", "HAIR DRYER", "MAKEUP", "NAIL POLISH", "SHOPPING MALL", "TOY STORE", "BOOK STORE", "PET SALON",
+    "CAR DEALER", "BANK TELLER", "MAIL TRUCK", "POST OFFICE", "MAIL BOX", "DELIVERY", "PACKAGE", "CARDBOARD BOX", "TEDDY BEAR", "TOY CAR",
+    "ACTION FIGURE", "PUZZLE", "JIGSAW", "LEGO TOWER", "SNOW GLOBE", "PIGGY BANK", "ALARM CLOCK", "HOURGLASS", "CALENDAR", "NOTEBOOK",
+    "HOMEWORK", "CLASSROOM", "BLACKBOARD", "CHALK", "WHITEBOARD", "MARKER", "SCIENCE LAB", "TEST TUBE", "MICROSCOPE", "MAGNIFYING GLASS",
+    "TELESCOPE", "PLANETARIUM", "MUSEUM", "ART GALLERY", "PAINT PALETTE", "SKETCH BOOK", "COMIC BOOK", "NEWSPAPER", "WEATHER MAP", "TORNADO"
+];
+
+const HARD_WORDS = [
+    "TIME TRAVEL", "PARALLEL WORLD", "BLACK HOLE", "QUANTUM LEAP", "GRAVITY", "MAGNETISM", "WIRELESS SIGNAL", "LOST AND FOUND", "SOCIAL MEDIA", "FAKE NEWS",
+    "IDENTITY THEFT", "MIND READING", "STAGE FRIGHT", "PEER PRESSURE", "MIXED SIGNALS", "BROKEN PROMISE", "COLD SHOULDER", "SILVER LINING", "BUSY BEE", "FISH OUT OF WATER",
+    "WILD GOOSE CHASE", "NEEDLE IN HAYSTACK", "PIECE OF CAKE", "HEART OF GOLD", "UNDER PRESSURE", "STRESS TEST", "BRAIN FREEZE", "BRAINSTORM", "DAYDREAM", "NIGHTMARE",
+    "LUCID DREAM", "INSIDE JOKE", "AWKWARD SILENCE", "SMALL TALK", "GROUP CHAT", "WRONG NUMBER", "MISSED CALL", "LOW BATTERY", "SYSTEM UPDATE", "ERROR MESSAGE",
+    "LOADING SCREEN", "WIFI PASSWORD", "SECRET AGENT", "DOUBLE AGENT", "SPY MOVIE", "ESCAPE PLAN", "PRISON BREAK", "JOB INTERVIEW", "OFFICE MEETING", "TEAM PLAYER",
+    "DEADLINE", "OVERTIME", "PARKING TICKET", "SPEED LIMIT", "TRAFFIC JAM", "ROAD RAGE", "FLAT TIRE", "LOST LUGGAGE", "SECURITY CHECK", "BOARDING PASS",
+    "DELAYED FLIGHT", "RED EYE", "JET LAG", "TIME ZONE", "PASSPORT PHOTO", "HOTEL LOBBY", "ROOM SERVICE", "WAKE UP CALL", "LOST KEYCARD", "BROKEN ELEVATOR",
+    "POWER OUTAGE", "BLACKOUT", "EMERGENCY EXIT", "FIRE DRILL", "EARTHQUAKE DRILL", "STORM SHELTER", "EVACUATION", "SPACE LAUNCH", "ALIEN SIGNAL", "UFO SIGHTING",
+    "METEOR SHOWER", "SOLAR ECLIPSE", "LUNAR ECLIPSE", "CONSTELLATION", "ASTEROID BELT", "SPACE DEBRIS", "SPACE WALK", "MOON LANDING", "MARS ROVER", "DEEP SEA",
+    "SEA LEVEL", "RIP CURRENT", "SHARK ATTACK", "SHIPWRECK", "MESSAGE IN BOTTLE", "TREASURE HUNT", "HIDDEN CAVE", "SECRET PASSAGE", "TRAP DOOR", "MAGIC PORTAL",
+    "INVISIBLE CLOAK", "SHAPE SHIFTER", "TELEPORT", "MIND CONTROL", "SPELL BOOK", "ANCIENT CURSE", "HAUNTED MIRROR", "CURSED DOLL", "CREEPY CLOWN", "URBAN LEGEND",
+    "GHOST TOWN", "ZOMBIE OUTBREAK", "VAMPIRE BITE", "WEREWOLF", "DRAGON EGG", "GIANT SPIDER", "KRAKEN", "MYTHICAL BEAST", "LEGENDARY HERO", "FINAL BOSS",
+    "BOSS FIGHT", "GAME OVER", "HIGH SCORE", "CHEAT CODE", "SPEED RUN", "LEVEL UP", "POWER UP", "RANDOM ENCOUNTER", "SIDE QUEST", "QUEST LOG",
+    "SAVE POINT", "RESPAWN", "BOARD MEETING", "STOCK MARKET", "MONEY LAUNDERING", "TAX RETURN", "STUDENT LOAN", "CREDIT SCORE", "LATE FEE", "OVERDRAFT",
+    "BUDGET CUT", "PRICE HIKE", "SHOPPING SPREE", "IMPULSE BUY", "BUYER REMORSE", "HARD BARGAIN", "SALES PITCH", "CUSTOMER SERVICE", "COMPLAINT BOX", "SUGGESTION BOX",
+    "QUALITY CONTROL", "WARRANTY", "BROKEN SCREEN", "CRACKED PHONE", "FROZEN APP", "BLUE SCREEN", "DATA LEAK", "PASSWORD RESET", "TWO FACTOR", "FACE SCAN",
+    "FINGERPRINT", "VOICE COMMAND", "SMART HOME", "ROBOT VACUUM", "SELF DRIVING", "ELECTRIC CAR", "CHARGING STATION", "TRAFFIC CAMERA", "SPEED TRAP", "PARKING GARAGE",
+    "CARPOOL LANE", "TOLL BOOTH", "CONSTRUCTION ZONE", "DETOUR", "ROAD CLOSED", "TRAIN DELAY", "SIGNAL FAILURE", "LOST IN MAZE", "ESCAPE ROOM", "PUZZLE BOX",
+    "RIDDLE", "CONSPIRACY", "SECRET CODE", "CIPHER", "MAP LEGEND", "COMPASS ROSE", "NORTH STAR", "MIRAGE", "OPTICAL ILLUSION", "FORCED PERSPECTIVE",
+    "MIRROR MAZE", "HALL OF MIRRORS", "MAGIC SHOW", "CARD TRICK", "SLEIGHT OF HAND", "VANISHING ACT", "SMOKE AND MIRRORS", "STAGE MAKEUP", "COSTUME CHANGE", "QUICK CHANGE"
+];
+const DIFFICULTY_MULTIPLIER = { easy: 1, medium: 1.4, hard: 1.8 };
 const GHOST_THEMES = new Set(["classic", "mint", "peach", "lilac", "midnight"]);
 const HEIGHT_THEMES = new Set(["short", "standard", "tall"]);
 const LEG_THEMES = new Set(["classic", "long", "stubby", "wavy", "float"]);
@@ -113,6 +155,7 @@ io.on('connection', (socket) => {
         pendingHintTimes = new Set();
         guessedPlayers = [];
         drawerId = null;
+        currentDifficulty = "easy";
         roundTime = 0;
         resetCustomUsage();
         io.emit('update_player_list', Object.values(players));
@@ -152,8 +195,9 @@ io.on('connection', (socket) => {
         if (socket.id !== drawerId) return;
         if (!currentOptions.length) return;
         const selected = String(word || "").toUpperCase();
-        if (!currentOptions.includes(selected)) return;
-        startRoundWithWord(selected);
+        const option = currentOptions.find(opt => opt.word === selected);
+        if (!option) return;
+        startRoundWithWord(option.word, option.difficulty);
     });
 
     socket.on('custom_word', (input) => {
@@ -173,7 +217,7 @@ io.on('connection', (socket) => {
         }
 
         customUsed[socket.id] = true;
-        startRoundWithWord(sanitized);
+        startRoundWithWord(sanitized, "easy");
     });
 
     // 4. CHAT & GUESSING
@@ -188,7 +232,9 @@ io.on('connection', (socket) => {
             !guessedPlayers.includes(socket.id)) {
             
             // Handle Correct Guess
-            const points = Math.max(10, Math.ceil(roundTime / 2));
+            const basePoints = Math.max(10, Math.ceil(roundTime / 2));
+            const multiplier = DIFFICULTY_MULTIPLIER[currentDifficulty] || 1;
+            const points = Math.ceil(basePoints * multiplier);
             player.score += points;
             players[drawerId].score += 5; // Drawer gets points too
             guessedPlayers.push(socket.id);
@@ -248,6 +294,7 @@ function startNewRound() {
         currentHintDisplay = "";
         revealedIndices = new Set();
         pendingHintTimes = new Set();
+        currentDifficulty = "easy";
         drawerId = null;
         roundTime = 0;
         resetCustomUsage();
@@ -271,20 +318,25 @@ function startNewRound() {
         currentHintDisplay = "";
         revealedIndices = new Set();
         pendingHintTimes = new Set();
+        currentDifficulty = "easy";
         roundTime = 0;
         io.emit('game_reset', "Not enough players.");
         emitHostUpdate();
         return;
     }
 
-    // Send 6 words to drawer
-    const options = pickRandomWords(6);
-    currentOptions = options;
+    // Send 6 words to drawer (2 easy, 2 medium, 2 hard)
+    const options = [
+        ...pickRandomWords(EASY_WORDS, 2).map(word => ({ word, difficulty: "easy" })),
+        ...pickRandomWords(MEDIUM_WORDS, 2).map(word => ({ word, difficulty: "medium" })),
+        ...pickRandomWords(HARD_WORDS, 2).map(word => ({ word, difficulty: "hard" }))
+    ];
+    currentOptions = shuffleArray(options);
     const canCustom = !customUsed[drawerId];
 
     io.emit('clear_canvas');
     io.emit('choosing_word', { drawerId }); // Tell everyone someone is choosing
-    io.to(drawerId).emit('choose_word', { words: options, canCustom }); // Show modal to drawer
+    io.to(drawerId).emit('choose_word', { words: currentOptions, canCustom }); // Show modal to drawer
 }
 
 function endRound() {
@@ -364,13 +416,21 @@ function getNextDrawerId() {
     return playerOrder[(idx + 1) % playerOrder.length];
 }
 
-function pickRandomWords(count) {
+function pickRandomWords(list, count) {
     const picks = new Set();
-    const target = Math.min(count, WORD_LIST.length);
+    const target = Math.min(count, list.length);
     while (picks.size < target) {
-        picks.add(WORD_LIST[Math.floor(Math.random() * WORD_LIST.length)]);
+        picks.add(list[Math.floor(Math.random() * list.length)]);
     }
     return Array.from(picks);
+}
+
+function shuffleArray(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
 }
 
 function sanitizeCustomWord(input) {
@@ -415,13 +475,14 @@ function resetCustomUsage() {
     });
 }
 
-function startRoundWithWord(word) {
+function startRoundWithWord(word, difficulty = "easy") {
     currentWord = word.toUpperCase();
     currentOptions = [];
     revealedIndices = new Set();
     pendingHintTimes = new Set([45, 20, 10, 5]);
     currentHintDisplay = buildHintDisplay();
     roundTime = 60;
+    currentDifficulty = difficulty || "easy";
 
     // Notify everyone round has started
     io.emit('round_start', {
@@ -457,6 +518,7 @@ function endGame() {
     currentHintDisplay = "";
     revealedIndices = new Set();
     pendingHintTimes = new Set();
+    currentDifficulty = "easy";
     resetCustomUsage();
 
     const playerList = Object.values(players);
