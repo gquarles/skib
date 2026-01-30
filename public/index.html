@@ -93,10 +93,7 @@
         .ghost-badge .eyes { top: 5px; left: 3px; width: 2px; height: 2px; box-shadow: 5px 0 0 var(--ghost-eye); }
 
         .ghost-legs { position: absolute; left: 1px; right: 1px; bottom: var(--ghost-leg-offset); display: flex; justify-content: space-between; padding: 0 2px; gap: 1px; }
-        .ghost-legs .leg { background: var(--ghost-body); border: 1px solid var(--ghost-border); border-top: none; border-radius: 0 0 6px 6px; transform-origin: top; animation: ghost-leg 1.6s ease-in-out infinite; }
-        .ghost-legs .leg-left { animation-delay: 0s; }
-        .ghost-legs .leg-middle { animation-delay: 0.08s; }
-        .ghost-legs .leg-right { animation-delay: 0.16s; }
+        .ghost-legs .leg { background: var(--ghost-body); border: 1px solid var(--ghost-border); border-top: none; border-radius: 0 0 6px 6px; transform-origin: top; }
         .ghost .ghost-legs .leg { width: 6px; height: 7px; }
         .ghost-badge .ghost-legs .leg { width: 5px; height: 6px; }
 
@@ -105,17 +102,13 @@
         .ghost[data-legs="long"] .ghost-legs .leg,
         .ghost-badge[data-legs="long"] .ghost-legs .leg { height: 9px; border-radius: 0 0 8px 8px; }
         .ghost[data-legs="wavy"] .ghost-legs .leg,
-        .ghost-badge[data-legs="wavy"] .ghost-legs .leg { width: 7px; height: 6px; border-radius: 0 0 10px 10px; animation-duration: 1.1s; }
+        .ghost-badge[data-legs="wavy"] .ghost-legs .leg { width: 7px; height: 6px; border-radius: 0 0 10px 10px; }
         .ghost[data-legs="float"] .ghost-legs,
         .ghost-badge[data-legs="float"] .ghost-legs { display: none; }
 
         @keyframes ghost-float {
             0%, 100% { transform: translateY(0); }
             50% { transform: translateY(-2px); }
-        }
-        @keyframes ghost-leg {
-            0%, 100% { transform: translateY(0) rotate(0deg); }
-            50% { transform: translateY(1px) rotate(2deg); }
         }
         .ghost-preview { width: 140px; height: 100px; margin: 10px auto 6px; border-radius: 12px; border: 1px solid #ddd; background: #f8f8f8; display: flex; align-items: center; justify-content: center; }
         .ghost-preview .ghost { width: 52px; height: 60px; border-radius: 24px 24px 12px 12px; }
@@ -416,12 +409,9 @@
         legs.className = 'ghost-legs';
         const legLeft = document.createElement('span');
         legLeft.className = 'leg leg-left';
-        const legMiddle = document.createElement('span');
-        legMiddle.className = 'leg leg-middle';
         const legRight = document.createElement('span');
         legRight.className = 'leg leg-right';
         legs.appendChild(legLeft);
-        legs.appendChild(legMiddle);
         legs.appendChild(legRight);
 
         ghost.appendChild(eyes);
@@ -464,6 +454,7 @@
     function updateCursorPosition(id, x, y) {
         if (id === myId) return;
         if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+        const prev = cursorPositions.get(id);
         cursorPositions.set(id, { x, y });
         renderCursorPosition(id);
     }
