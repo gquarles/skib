@@ -769,6 +769,10 @@
             renderWordOptions(data, false);
             return;
         }
+        if (data?.drawerId) {
+            updateDrawerState(data.drawerId);
+            if (data.drawerId !== socket.id) return;
+        }
         const words = Array.isArray(data?.words) ? data.words : [];
         renderWordOptions(words, !!data?.canCustom);
     });

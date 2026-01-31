@@ -15,7 +15,7 @@ let roundInterval = null;
 let isGameRunning = false;
 let guessedPlayers = []; // Track who guessed correctly this round
 let currentRound = 0;
-const TOTAL_ROUNDS = 5;
+const TOTAL_ROUNDS = 5; // Turns per player per game
 let currentOptions = [];
 let currentDifficulty = "easy";
 let customUsed = {}; // { socketId: boolean }
@@ -24,6 +24,10 @@ let playerOrder = [];
 let revealedIndices = new Set();
 let currentHintDisplay = "";
 let pendingHintTimes = new Set();
+const HINT_SPACE_MARKER = "|";
+let maxTurns = 0;
+let roundEnding = false;
+let roundTimeout = null;
 
 const EASY_WORDS = [
     "APPLE", "BANANA", "ORANGE", "GRAPES", "LEMON", "PEACH", "PEAR", "CHERRY", "MELON", "BERRY",
@@ -145,9 +149,15 @@ io.on('connection', (socket) => {
             emitHostUpdate();
             return;
         }
+        if (roundTimeout) {
+            clearTimeout(roundTimeout);
+            roundTimeout = null;
+        }
         clearInterval(roundInterval);
         Object.values(players).forEach(p => { p.score = 0; });
         currentRound = 0;
+        maxTurns = TOTAL_ROUNDS * Object.keys(players).length;
+        roundEnding = false;
         currentOptions = [];
         currentWord = "";
         currentHintDisplay = "";
@@ -283,12 +293,18 @@ io.on('connection', (socket) => {
 function startNewRound() {
     isGameRunning = true;
     guessedPlayers = [];
+    roundEnding = false;
+    if (roundTimeout) {
+        clearTimeout(roundTimeout);
+        roundTimeout = null;
+    }
     
     // Pick next drawer (round-robin in join order)
     const playerIds = Object.keys(players);
     if (playerIds.length < 2) {
         isGameRunning = false;
         currentRound = 0;
+        maxTurns = 0;
         currentOptions = [];
         currentWord = "";
         currentHintDisplay = "";
@@ -304,8 +320,9 @@ function startNewRound() {
     }
 
     // Round-robin drawer rotation
+    if (!maxTurns) maxTurns = TOTAL_ROUNDS * playerIds.length;
     currentRound += 1;
-    if (currentRound > TOTAL_ROUNDS) {
+    if (maxTurns && currentRound > maxTurns) {
         endGame();
         return;
     }
@@ -313,6 +330,7 @@ function startNewRound() {
     if (!drawerId) {
         isGameRunning = false;
         currentRound = 0;
+        maxTurns = 0;
         currentOptions = [];
         currentWord = "";
         currentHintDisplay = "";
@@ -336,10 +354,12 @@ function startNewRound() {
 
     io.emit('clear_canvas');
     io.emit('choosing_word', { drawerId }); // Tell everyone someone is choosing
-    io.to(drawerId).emit('choose_word', { words: currentOptions, canCustom }); // Show modal to drawer
+    io.to(drawerId).emit('choose_word', { drawerId, words: currentOptions, canCustom }); // Show modal to drawer
 }
 
 function endRound() {
+    if (roundEnding) return;
+    roundEnding = true;
     clearInterval(roundInterval);
     pendingHintTimes = new Set();
     io.emit('chat_message', { 
@@ -349,8 +369,10 @@ function endRound() {
     });
     
     // Small delay before next round
-    setTimeout(() => {
-        if (currentRound >= TOTAL_ROUNDS) {
+    if (roundTimeout) clearTimeout(roundTimeout);
+    roundTimeout = setTimeout(() => {
+        roundTimeout = null;
+        if (maxTurns && currentRound >= maxTurns) {
             endGame();
             return;
         }
@@ -358,24 +380,27 @@ function endRound() {
     }, 3000);
 }
 
+function formatHintDisplay(word, revealedSet) {
+    if (!word) return "";
+    let out = "";
+    for (let i = 0; i < word.length; i++) {
+        const ch = word[i];
+        if (ch === " ") {
+            out += `${HINT_SPACE_MARKER} `;
+            continue;
+        }
+        const isRevealed = revealedSet && revealedSet.has(i);
+        out += (isRevealed ? ch : "_") + " ";
+    }
+    return out.trim();
+}
+
 function generateUnderscores(word) {
-    return word.replace(/[A-Z]/g, '_ ').trim();
+    return formatHintDisplay(word, null);
 }
 
 function buildHintDisplay() {
-    if (!currentWord) return "";
-    let out = "";
-    for (let i = 0; i < currentWord.length; i++) {
-        const ch = currentWord[i];
-        if (ch === " ") {
-            out += "  ";
-        } else if (revealedIndices.has(i)) {
-            out += ch + " ";
-        } else {
-            out += "_ ";
-        }
-    }
-    return out.trim();
+    return formatHintDisplay(currentWord, revealedIndices);
 }
 
 function revealRandomLetter() {
@@ -507,10 +532,16 @@ function startRoundWithWord(word, difficulty = "easy") {
 }
 
 function endGame() {
+    if (roundTimeout) {
+        clearTimeout(roundTimeout);
+        roundTimeout = null;
+    }
     clearInterval(roundInterval);
     isGameRunning = false;
     roundTime = 0;
     currentRound = 0;
+    maxTurns = 0;
+    roundEnding = false;
     currentOptions = [];
     drawerId = null;
     currentWord = "";
