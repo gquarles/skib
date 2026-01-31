@@ -230,7 +230,27 @@
 <script>
     const socket = io();
     const canvas = document.getElementById('drawing-board');
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+    // Visible/composited context (we do NOT draw directly to this except compositing)
+    const ctx = canvas.getContext('2d', { willReadFrequently: false });
+
+    // --- TWO-LAYER RENDERING (INK over FILL) ---
+    const fillCanvas = document.createElement('canvas');
+    fillCanvas.width = canvas.width;
+    fillCanvas.height = canvas.height;
+    const fillCtx = fillCanvas.getContext('2d', { willReadFrequently: true });
+
+    const inkCanvas = document.createElement('canvas');
+    inkCanvas.width = canvas.width;
+    inkCanvas.height = canvas.height;
+    const inkCtx = inkCanvas.getContext('2d', { willReadFrequently: true });
+
+    function renderComposite() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(fillCanvas, 0, 0);
+        ctx.drawImage(inkCanvas, 0, 0);
+    }
+
     const cursorLayer = document.getElementById('cursor-layer');
     const cursorNodes = new Map();
     const playerNames = new Map();
@@ -459,7 +479,6 @@
     function updateCursorPosition(id, x, y) {
         if (id === myId) return;
         if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-        const prev = cursorPositions.get(id);
         cursorPositions.set(id, { x, y });
         renderCursorPosition(id);
     }
@@ -497,7 +516,7 @@
         lastY: 0,
         originX: 0,
         originY: 0,
-        snapshot: null,
+        snapshot: null,          // snapshot of INK layer for straight preview
         straightActive: false,
         straightFromX: 0,
         straightFromY: 0,
@@ -506,6 +525,23 @@
     };
     let lastWordOptions = [];
     let lastCanCustom = false;
+
+    // --- DEBUG: PIXEL SNAP TOGGLE (OPTION C) ---
+    const CANVAS_HELPER_BASE = "Scroll to resize - Shift to draw straight lines";
+    let snapToPixels = false; // Toggle with F2
+
+    function updateCanvasHelperText() {
+        const el = document.getElementById('canvas-helper');
+        if (!el) return;
+        el.innerText = `${CANVAS_HELPER_BASE} | Pixel snap: ${snapToPixels ? 'ON' : 'OFF'} (F2)`;
+    }
+
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'F2') {
+            snapToPixels = !snapToPixels;
+            updateCanvasHelperText();
+        }
+    });
 
     // --- PALETTE ---
     const colors = [
@@ -526,8 +562,6 @@
         _c1ctx.fillRect(0, 0, 1, 1);
         return new Uint32Array(_c1ctx.getImageData(0, 0, 1, 1).data.buffer)[0];
     }
-
-    const PALETTE_SET = new Set(colors.map(hexToUint32));
 
     let ghostPreviewGhost = null;
 
@@ -629,16 +663,24 @@
 
     // --- INITIAL SETUP ---
     window.onload = () => {
-        ctx.fillStyle = "#FFFFFF";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
+        // Fill layer starts white (opaque)
+        fillCtx.fillStyle = "#FFFFFF";
+        fillCtx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Ink layer starts transparent
+        inkCtx.clearRect(0, 0, canvas.width, canvas.height);
+        inkCtx.lineCap = 'round';
+        inkCtx.lineJoin = 'round';
+
+        renderComposite();
+
         setupPalette();
         renderGhostPicker();
         renderHeightPicker();
         renderLegPicker();
         renderGhostPreview();
         updateUI();
+        updateCanvasHelperText();
         saveHistory();
     };
 
@@ -817,8 +859,8 @@
         clearCanvas();
     });
 
-    socket.on('canvas_snapshot', (dataUrl) => {
-        applyCanvasSnapshot(dataUrl);
+    socket.on('canvas_snapshot', (payload) => {
+        applyCanvasSnapshot(payload);
     });
 
     socket.on('cursor_update', (data) => {
@@ -941,27 +983,80 @@
         refreshCursorDrawerState();
     }
 
+    // Draw line onto INK layer, then composite
     function drawLine(x0, y0, x1, y1, c, s) {
-        ctx.beginPath();
-        ctx.moveTo(x0, y0);
-        ctx.lineTo(x1, y1);
-        ctx.strokeStyle = c;
-        ctx.lineWidth = s;
-        ctx.stroke();
+        inkCtx.beginPath();
+        inkCtx.moveTo(x0, y0);
+        inkCtx.lineTo(x1, y1);
+        inkCtx.strokeStyle = c;
+        inkCtx.lineWidth = s;
+        inkCtx.stroke();
+        renderComposite();
     }
 
     function clearCanvas() {
-        ctx.fillStyle = "#FFFFFF";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        fillCtx.fillStyle = "#FFFFFF";
+        fillCtx.fillRect(0, 0, canvas.width, canvas.height);
+        inkCtx.clearRect(0, 0, canvas.width, canvas.height);
+        renderComposite();
     }
 
-    function applyCanvasSnapshot(dataUrl) {
-        const img = new Image();
-        img.onload = () => {
-            clearCanvas();
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        };
-        img.src = dataUrl;
+    // Snapshots now include BOTH layers (still as a string for server compatibility)
+    const SNAP_DELIM = "|~|INK|~|";
+
+    function loadImage(dataUrl) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = reject;
+            img.src = dataUrl;
+        });
+    }
+
+    async function applyCanvasSnapshot(payload) {
+        try {
+            // payload can be:
+            // 1) "fillDataUrl|~|INK|~|inkDataUrl"  (new)
+            // 2) "data:image/png..."               (legacy composite)
+            // 3) { fill: "...", ink: "..." }       (if your server relays objects)
+            let fillUrl = null;
+            let inkUrl = null;
+
+            if (typeof payload === 'string') {
+                if (payload.includes(SNAP_DELIM)) {
+                    const parts = payload.split(SNAP_DELIM);
+                    fillUrl = parts[0] || null;
+                    inkUrl = parts[1] || null;
+                } else {
+                    // Legacy composite snapshot: treat it as fill layer only
+                    fillUrl = payload;
+                    inkUrl = null;
+                }
+            } else if (payload && typeof payload === 'object') {
+                fillUrl = payload.fill || payload.fillUrl || payload.main || null;
+                inkUrl = payload.ink || payload.inkUrl || null;
+            }
+
+            if (!fillUrl) return;
+
+            const fillImgPromise = loadImage(fillUrl);
+            const inkImgPromise = inkUrl ? loadImage(inkUrl) : Promise.resolve(null);
+
+            const [fillImg, inkImg] = await Promise.all([fillImgPromise, inkImgPromise]);
+
+            // Apply
+            fillCtx.clearRect(0, 0, canvas.width, canvas.height);
+            fillCtx.drawImage(fillImg, 0, 0, canvas.width, canvas.height);
+
+            inkCtx.clearRect(0, 0, canvas.width, canvas.height);
+            if (inkImg) {
+                inkCtx.drawImage(inkImg, 0, 0, canvas.width, canvas.height);
+            }
+
+            renderComposite();
+        } catch (err) {
+            console.warn("applyCanvasSnapshot failed:", err);
+        }
     }
 
     // --- CURSOR INPUT ---
@@ -1056,10 +1151,21 @@
         const r = canvas.getBoundingClientRect();
         const scaleX = canvas.width / r.width;
         const scaleY = canvas.height / r.height;
-        return {
-            x: (e.clientX - r.left) * scaleX,
-            y: (e.clientY - r.top) * scaleY
-        };
+
+        let x = (e.clientX - r.left) * scaleX;
+        let y = (e.clientY - r.top) * scaleY;
+
+        // Option C: Debug snap-to-pixel grid (toggle with F2)
+        if (snapToPixels) {
+            x = Math.round(x);
+            y = Math.round(y);
+        }
+
+        // Clamp
+        x = Math.max(0, Math.min(canvas.width - 1, x));
+        y = Math.max(0, Math.min(canvas.height - 1, y));
+
+        return { x, y };
     };
 
     canvas.addEventListener('mousedown', (e) => {
@@ -1070,7 +1176,7 @@
             state.isDrawing = true;
             state.lastX = x; state.lastY = y;
             state.originX = x; state.originY = y;
-            state.snapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            state.snapshot = inkCtx.getImageData(0, 0, canvas.width, canvas.height);
             state.straightActive = false;
             state.straightFromX = x; state.straightFromY = y;
             state.straightToX = x; state.straightToY = y;
@@ -1089,14 +1195,22 @@
     window.addEventListener('mouseup', () => {
         if (!state.isDrawing) return;
         state.isDrawing = false;
+
         if (state.straightActive) {
-            ctx.lineWidth = state.size;
-            ctx.strokeStyle = state.color;
-            ctx.putImageData(state.snapshot, 0, 0);
-            ctx.beginPath();
-            ctx.moveTo(state.straightFromX, state.straightFromY);
-            ctx.lineTo(state.straightToX, state.straightToY);
-            ctx.stroke();
+            inkCtx.lineWidth = state.size;
+            inkCtx.strokeStyle = state.color;
+
+            // restore ink snapshot
+            inkCtx.putImageData(state.snapshot, 0, 0);
+
+            // commit line
+            inkCtx.beginPath();
+            inkCtx.moveTo(state.straightFromX, state.straightFromY);
+            inkCtx.lineTo(state.straightToX, state.straightToY);
+            inkCtx.stroke();
+
+            renderComposite();
+
             socket.emit('draw_line', {
                 x0: state.straightFromX,
                 y0: state.straightFromY,
@@ -1105,47 +1219,60 @@
                 color: state.color,
                 size: state.size
             });
+
             state.lastX = state.straightToX;
             state.lastY = state.straightToY;
             state.originX = state.straightToX;
             state.originY = state.straightToY;
-            state.snapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            state.snapshot = inkCtx.getImageData(0, 0, canvas.width, canvas.height);
             state.straightActive = false;
         }
+
         saveHistory();
     });
 
     function draw(e) {
         if (!isDrawer) return;
         const { x, y } = getPos(e);
-        ctx.lineWidth = state.size;
-        ctx.strokeStyle = state.color;
+
+        inkCtx.lineWidth = state.size;
+        inkCtx.strokeStyle = state.color;
 
         if (e.shiftKey) {
             if (!state.straightActive) {
                 state.straightActive = true;
                 state.straightFromX = state.originX;
                 state.straightFromY = state.originY;
-                state.snapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                state.snapshot = inkCtx.getImageData(0, 0, canvas.width, canvas.height);
             }
+
             state.straightToX = x;
             state.straightToY = y;
-            ctx.putImageData(state.snapshot, 0, 0);
-            ctx.beginPath();
-            ctx.moveTo(state.straightFromX, state.straightFromY);
-            ctx.lineTo(x, y);
-            ctx.stroke();
+
+            // restore snapshot, then draw preview
+            inkCtx.putImageData(state.snapshot, 0, 0);
+            inkCtx.beginPath();
+            inkCtx.moveTo(state.straightFromX, state.straightFromY);
+            inkCtx.lineTo(x, y);
+            inkCtx.stroke();
+
+            renderComposite();
             return;
         }
 
         if (state.straightActive) {
+            // finalize straight line immediately when shift released mid-draw
             state.straightToX = x;
             state.straightToY = y;
-            ctx.putImageData(state.snapshot, 0, 0);
-            ctx.beginPath();
-            ctx.moveTo(state.straightFromX, state.straightFromY);
-            ctx.lineTo(state.straightToX, state.straightToY);
-            ctx.stroke();
+
+            inkCtx.putImageData(state.snapshot, 0, 0);
+            inkCtx.beginPath();
+            inkCtx.moveTo(state.straightFromX, state.straightFromY);
+            inkCtx.lineTo(state.straightToX, state.straightToY);
+            inkCtx.stroke();
+
+            renderComposite();
+
             socket.emit('draw_line', {
                 x0: state.straightFromX,
                 y0: state.straightFromY,
@@ -1154,19 +1281,22 @@
                 color: state.color,
                 size: state.size
             });
+
             state.lastX = state.straightToX;
             state.lastY = state.straightToY;
             state.originX = state.straightToX;
             state.originY = state.straightToY;
-            state.snapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            state.snapshot = inkCtx.getImageData(0, 0, canvas.width, canvas.height);
             state.straightActive = false;
             return;
         }
 
-        ctx.beginPath();
-        ctx.moveTo(state.lastX, state.lastY);
-        ctx.lineTo(x, y);
-        ctx.stroke();
+        inkCtx.beginPath();
+        inkCtx.moveTo(state.lastX, state.lastY);
+        inkCtx.lineTo(x, y);
+        inkCtx.stroke();
+
+        renderComposite();
 
         socket.emit('draw_line', { x0: state.lastX, y0: state.lastY, x1: x, y1: y, color: state.color, size: state.size });
 
@@ -1174,7 +1304,7 @@
         state.lastY = y;
         state.originX = x;
         state.originY = y;
-        state.snapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        state.snapshot = inkCtx.getImageData(0, 0, canvas.width, canvas.height);
     }
 
     // --- CHAT INPUT ---
@@ -1198,84 +1328,43 @@
         hasSolved = false;
     }
 
-    // --- SUPER ROBUST BUCKET FILL ---
+    // --- BUCKET FILL (CORRECT: fill-layer + ink barrier + color margin underpaint) ---
 
     function smartFill(startX, startY, hexColor) {
         const width = canvas.width;
         const height = canvas.height;
-
         if (startX < 0 || startX >= width || startY < 0 || startY >= height) return;
 
-        const imageData = ctx.getImageData(0, 0, width, height);
-        const pixelData = new Uint32Array(imageData.data.buffer);
+        const N = width * height;
+
+        // Read fill layer pixels (this is what we're modifying)
+        const fillImageData = fillCtx.getImageData(0, 0, width, height);
+        const fill32 = new Uint32Array(fillImageData.data.buffer);
+
+        // Read ink alpha (barrier)
+        const inkImageData = inkCtx.getImageData(0, 0, width, height);
+        const inkBytes = inkImageData.data; // RGBA bytes
 
         const startIdx = startY * width + startX;
-        const targetVal = pixelData[startIdx];
         const fillVal = hexToUint32(hexColor);
 
+        let targetVal = fill32[startIdx];
         if (targetVal === fillVal) return;
 
-        function getDiff(colorA, colorB) {
-            const rA = colorA & 0xFF,     gA = (colorA >> 8) & 0xFF,  bA = (colorA >> 16) & 0xFF;
-            const rB = colorB & 0xFF,     gB = (colorB >> 8) & 0xFF,  bB = (colorB >> 16) & 0xFF;
-            return Math.abs(rA - rB) + Math.abs(gA - gB) + Math.abs(bA - bB);
-        }
+        // Barrier: any ink alpha > 0 blocks traversal
+        const isInk = (idx) => inkBytes[idx * 4 + 3] > 0;
 
-        const N = width * height;
-        const isWall = new Uint8Array(N);
-        for (let i = 0; i < N; i++) {
-            const v = pixelData[i];
-            if (v !== targetVal && PALETTE_SET.has(v)) isWall[i] = 1;
-        }
+        // If clicked directly on ink, don't fill (optional: you could search nearby)
+        if (isInk(startIdx)) return;
 
-        const WALL_RADIUS = 24;
-        const INF = 65535;
-
-        const wallDist = new Uint16Array(N);
-        wallDist.fill(INF);
-
-        const q = new Int32Array(N);
-        let qh = 0, qt = 0;
-
-        for (let i = 0; i < N; i++) {
-            if (isWall[i]) {
-                wallDist[i] = 0;
-                q[qt++] = i;
-            }
-        }
-
-        while (qh < qt) {
-            const p = q[qh++];
-            const d = wallDist[p];
-            if (d >= WALL_RADIUS) continue;
-
-            const x = p % width;
-            let n;
-
-            if (x > 0) {
-                n = p - 1;
-                if (wallDist[n] > d + 1) { wallDist[n] = d + 1; q[qt++] = n; }
-            }
-            if (x < width - 1) {
-                n = p + 1;
-                if (wallDist[n] > d + 1) { wallDist[n] = d + 1; q[qt++] = n; }
-            }
-            if (p >= width) {
-                n = p - width;
-                if (wallDist[n] > d + 1) { wallDist[n] = d + 1; q[qt++] = n; }
-            }
-            if (p < N - width) {
-                n = p + width;
-                if (wallDist[n] > d + 1) { wallDist[n] = d + 1; q[qt++] = n; }
-            }
-        }
-
-        const CORE_TOL = 48;
-        const EDGE_TOL = 765;
-
+        // Flood fill (exact match on fill layer)
         const visited = new Uint8Array(N);
         const stack = new Int32Array(N);
         let sp = 0;
+
+        // Track filled pixels so we can do a 1px "color margin" underpaint into ink
+        const filledList = new Int32Array(N);
+        let filledCount = 0;
 
         visited[startIdx] = 1;
         stack[sp++] = startIdx;
@@ -1283,17 +1372,11 @@
         while (sp) {
             const p = stack[--sp];
 
-            if (isWall[p]) continue;
+            if (isInk(p)) continue;
+            if (fill32[p] !== targetVal) continue;
 
-            const curVal = pixelData[p];
-            const diff = getDiff(curVal, targetVal);
-
-            const inCore = diff <= CORE_TOL;
-            const inFringe = (wallDist[p] !== INF && wallDist[p] <= WALL_RADIUS && diff <= EDGE_TOL);
-
-            if (!inCore && !inFringe) continue;
-
-            pixelData[p] = fillVal;
+            fill32[p] = fillVal;
+            filledList[filledCount++] = p;
 
             const x = p % width;
             let n;
@@ -1316,17 +1399,53 @@
             }
         }
 
-        ctx.putImageData(imageData, 0, 0);
+        // "Color margin" underpaint: fill 1px INTO the ink pixels adjacent to the filled region.
+        // This removes the white/bright halo without spilling outside, because we only step from
+        // the filled region into immediate ink neighbors whose underlying fill was targetVal.
+        const COLOR_MARGIN = 1; // increase to 2 if you want stronger underpaint, but 1 is safest
+
+        if (COLOR_MARGIN > 0 && filledCount > 0) {
+            for (let i = 0; i < filledCount; i++) {
+                const p = filledList[i];
+                const x = p % width;
+                let n;
+
+                if (x > 0) {
+                    n = p - 1;
+                    if (isInk(n) && fill32[n] === targetVal) fill32[n] = fillVal;
+                }
+                if (x < width - 1) {
+                    n = p + 1;
+                    if (isInk(n) && fill32[n] === targetVal) fill32[n] = fillVal;
+                }
+                if (p >= width) {
+                    n = p - width;
+                    if (isInk(n) && fill32[n] === targetVal) fill32[n] = fillVal;
+                }
+                if (p < N - width) {
+                    n = p + width;
+                    if (isInk(n) && fill32[n] === targetVal) fill32[n] = fillVal;
+                }
+            }
+        }
+
+        fillCtx.putImageData(fillImageData, 0, 0);
+        renderComposite();
     }
 
     // --- HISTORY ---
 
     function saveHistory() {
         if (!isDrawer) return;
+
         if (state.historyStep < state.history.length - 1) {
             state.history = state.history.slice(0, state.historyStep + 1);
         }
-        state.history.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
+
+        state.history.push({
+            fill: fillCtx.getImageData(0, 0, canvas.width, canvas.height),
+            ink: inkCtx.getImageData(0, 0, canvas.width, canvas.height)
+        });
         state.historyStep++;
 
         if (state.history.length > 20) {
@@ -1337,21 +1456,35 @@
 
     function resetHistoryToCurrent() {
         if (!isDrawer) return;
-        state.history = [ctx.getImageData(0, 0, canvas.width, canvas.height)];
+        state.history = [{
+            fill: fillCtx.getImageData(0, 0, canvas.width, canvas.height),
+            ink: inkCtx.getImageData(0, 0, canvas.width, canvas.height)
+        }];
         state.historyStep = 0;
     }
 
     function broadcastSnapshot() {
         if (!isDrawer) return;
-        const dataUrl = canvas.toDataURL('image/png');
-        socket.emit('canvas_snapshot', dataUrl);
+
+        const fillUrl = fillCanvas.toDataURL('image/png');
+        const inkUrl = inkCanvas.toDataURL('image/png');
+
+        // keep it a string (more likely server-compatible)
+        const packed = fillUrl + SNAP_DELIM + inkUrl;
+        socket.emit('canvas_snapshot', packed);
     }
 
     function undo() {
         if (!isDrawer) return;
         if (state.historyStep > 0) {
             state.historyStep--;
-            ctx.putImageData(state.history[state.historyStep], 0, 0);
+            const entry = state.history[state.historyStep];
+            if (!entry) return;
+
+            fillCtx.putImageData(entry.fill, 0, 0);
+            inkCtx.putImageData(entry.ink, 0, 0);
+            renderComposite();
+
             broadcastSnapshot();
         }
     }
