@@ -56,8 +56,43 @@
         #chat-input { width: 90%; padding: 8px; }
 
         /* UTILS */
-        .color-swatch { width: 24px; height: 24px; border-radius: 50%; display: inline-block; cursor: pointer; border: 2px solid rgba(0,0,0,0.1); transition: transform 0.1s, border-color 0.1s; }
+        .color-swatch { width: 24px; height: 24px; border-radius: 50%; display: inline-block; cursor: pointer; border: 2px solid rgba(0,0,0,0.1); transition: transform 0.1s, border-color 0.1s; position: relative; }
         .color-swatch:hover { transform: scale(1.1); }
+        .color-swatch::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            left: 50%;
+            bottom: calc(100% + 8px);
+            transform: translateX(-50%) translateY(4px);
+            background: rgba(20,20,20,0.92);
+            color: #fff;
+            font-size: 11px;
+            padding: 4px 6px;
+            border-radius: 6px;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.12s ease, transform 0.12s ease;
+            z-index: 20;
+        }
+        .color-swatch::before {
+            content: '';
+            position: absolute;
+            left: 50%;
+            bottom: calc(100% + 2px);
+            transform: translateX(-50%) translateY(4px);
+            border: 5px solid transparent;
+            border-top-color: rgba(20,20,20,0.92);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.12s ease, transform 0.12s ease;
+            z-index: 20;
+        }
+        .color-swatch:hover::after,
+        .color-swatch:hover::before {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
         .color-swatch.active { border-color: #222; transform: scale(1.2); box-shadow: 0 0 0 2px rgba(255,255,255,0.8) inset; }
 
         button { padding: 6px 12px; border: 1px solid #ccc; background: white; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 14px; display: inline-flex; align-items: center; gap: 6px; }
@@ -545,10 +580,18 @@
 
     // --- PALETTE ---
     const colors = [
-        '#000000', '#555555', '#ffffff',
-        '#ef130b', '#ff7100', '#ffe400',
-        '#00cc00', '#00b2ff', '#231fd3',
-        '#a300ba', '#d37caa', '#8b4513'
+        { hex: '#000000', name: 'Black' },
+        { hex: '#555555', name: 'Dark Gray' },
+        { hex: '#ffffff', name: 'White' },
+        { hex: '#ef130b', name: 'Red' },
+        { hex: '#ff7100', name: 'Orange' },
+        { hex: '#ffe400', name: 'Yellow' },
+        { hex: '#00cc00', name: 'Green' },
+        { hex: '#00b2ff', name: 'Cyan' },
+        { hex: '#231fd3', name: 'Blue' },
+        { hex: '#a300ba', name: 'Purple' },
+        { hex: '#d37caa', name: 'Pink' },
+        { hex: '#8b4513', name: 'Brown' }
     ];
 
     // --- Endianness-safe Uint32 conversion ---
@@ -1097,8 +1140,11 @@
         colors.forEach((c, i) => {
             const div = document.createElement('div');
             div.className = 'color-swatch' + (i === 0 ? ' active' : '');
-            div.style.backgroundColor = c;
-            div.onclick = () => setColor(c, div);
+            div.style.backgroundColor = c.hex;
+            div.title = c.name;
+            div.dataset.tooltip = c.name;
+            div.setAttribute('aria-label', `Color: ${c.name}`);
+            div.onclick = () => setColor(c.hex, div);
             p.appendChild(div);
         });
     }
