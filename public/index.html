@@ -6,11 +6,13 @@
     <title>Scribble Multiplayer</title>
     <style>
         :root { --bg-color: #38405e; --panel-bg: #fff; --accent: #4b79cf; --ghost-body: rgba(255,255,255,0.9); --ghost-border: rgba(0,0,0,0.2); --ghost-eye: #333; --ghost-h: 20px; --ghost-badge-h: 16px; --ghost-leg-offset: -3px; }
-        body { margin: 0; background-color: var(--bg-color); height: 100vh; font-family: sans-serif; overflow: hidden; display: flex; flex-direction: column; align-items: center; }
+        * { box-sizing: border-box; }
+        html, body { height: 100%; }
+        body { margin: 0; background-color: var(--bg-color); min-height: 100vh; min-height: 100dvh; font-family: sans-serif; overflow: hidden; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 12px; }
 
         /* OVERLAYS */
         .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 1000; }
-        .box { background: white; padding: 20px; border-radius: 10px; text-align: center; width: 300px; }
+        .box { background: white; padding: 20px; border-radius: 10px; text-align: center; width: 300px; max-width: 90vw; }
         .word-btn { display: block; width: 100%; padding: 10px; margin: 5px 0; background: var(--accent); color: white; border: none; cursor: pointer; border-radius: 4px; font-size: 16px; }
         .word-btn:hover { background: #3a63ad; }
         .word-btn.word-option { display: flex; align-items: center; justify-content: space-between; gap: 8px; text-transform: uppercase; }
@@ -20,40 +22,60 @@
         .difficulty-badge.hard { background: #fde2e1; color: #9c2b2b; }
 
         /* HEADER */
-        #header-bar { width: 100%; height: 60px; background: white; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.2); z-index: 10; margin-bottom: 20px; position: relative; }
+        #header-bar { width: min(1300px, 100%); height: 60px; background: white; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.2); z-index: 10; position: relative; flex-shrink: 0; }
         #word-container { font-size: 32px; font-weight: bold; letter-spacing: 0px; font-family: monospace; color: #333; }
         #word-container.word-hint { letter-spacing: -5px; }
         #timer { position: absolute; right: 20px; font-size: 24px; font-weight: bold; color: var(--accent); }
         #status-msg { position: absolute; left: 20px; font-size: 16px; color: #666; font-style: italic; }
         #btn-start { position: absolute; right: 120px; padding: 6px 10px; }
         #btn-start[disabled] { opacity: 0.6; cursor: not-allowed; }
+        #header-bar.round-over-state { background: #ffe8e2; box-shadow: 0 0 0 3px rgba(208, 45, 45, 0.18), 0 2px 5px rgba(0,0,0,0.2); }
+        #status-msg.round-over-state { color: #a11010; font-style: normal; font-weight: 700; }
+        #timer.round-over-state { color: #bf1b1b; animation: round-over-timer-pulse 0.72s ease-in-out infinite; }
+
+        #round-over-banner { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 960; opacity: 0; transition: opacity 0.15s ease; }
+        #round-over-banner.show { opacity: 1; }
+        .round-over-card { max-width: min(92vw, 640px); border-radius: 16px; padding: 24px 30px; text-align: center; color: #fff; border: 2px solid rgba(255,255,255,0.45); box-shadow: 0 18px 50px rgba(0,0,0,0.45); background: linear-gradient(145deg, #8f1313 0%, #d44316 100%); animation: round-over-pop 0.9s cubic-bezier(0.2, 0.78, 0.2, 1.04); }
+        .round-over-title { font-size: clamp(30px, 8vw, 52px); line-height: 1; font-weight: 900; letter-spacing: 2px; }
+        .round-over-word { margin-top: 10px; font-size: clamp(16px, 3.6vw, 26px); font-weight: 700; text-transform: uppercase; word-break: break-word; }
+
+        @keyframes round-over-pop {
+            0% { transform: scale(0.86); opacity: 0; }
+            55% { transform: scale(1.03); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        @keyframes round-over-timer-pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
 
         /* GAME */
-        #game-container { display: flex; gap: 10px; height: 600px; width: min(1300px, 98vw); }
+        #game-container { display: flex; gap: 10px; width: min(1300px, 100%); flex: 1 1 auto; min-height: 0; height: auto; align-items: stretch; overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 
         /* PLAYER LIST */
-        #player-list { width: 200px; background: var(--panel-bg); border-radius: 8px; padding: 10px; overflow-y: auto; }
+        #player-list { width: 200px; flex: 0 1 200px; min-width: 160px; min-height: 0; background: var(--panel-bg); border-radius: 8px; padding: 10px; overflow-y: auto; }
         .player-card { background: #eee; padding: 8px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
         .player-meta { display: flex; align-items: center; gap: 6px; min-width: 0; }
         .player-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .player-card.is-drawer { border: 2px solid #ff9800; background: #fff3e0; }
 
         /* MAIN CANVAS */
-        #main-area { flex-grow: 1; display: flex; flex-direction: column; gap: 10px; }
-        #toolbar { background: #f4f4f4; padding: 8px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; user-select: none; }
-        .tool-group { display: flex; gap: 8px; align-items: center; }
+        #main-area { flex-grow: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+        #toolbar { background: #f4f4f4; padding: 8px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; user-select: none; flex-wrap: wrap; gap: 8px; }
+        .tool-group { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
         #canvas-wrapper { position: relative; border-radius: 8px; overflow: hidden; background: white; border: 2px solid #ccc; width: min(750px, 100%); margin: 0 auto; }
-        canvas { display: block; background: white; cursor: crosshair; width: 100%; height: auto; }
+        canvas { display: block; background: white; cursor: crosshair; width: 100%; height: auto; touch-action: none; }
         #canvas-helper { color: #e6e6e6; font-size: 12px; text-align: center; opacity: 0.8; }
 
         /* CHAT */
-        #chat-panel { width: 250px; background: var(--panel-bg); border-radius: 8px; display: flex; flex-direction: column; }
-        #chat-messages { flex-grow: 1; padding: 10px; overflow-y: auto; background: #f9f9f9; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+        #chat-panel { width: 250px; flex: 0 1 250px; min-width: 200px; min-height: 0; background: var(--panel-bg); border-radius: 8px; display: flex; flex-direction: column; }
+        #chat-messages { flex-grow: 1; min-height: 0; padding: 10px; overflow-y: auto; background: #f9f9f9; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
         .msg b { margin-right: 5px; }
         .msg.correct { color: green; background: #e0ffe0; padding: 4px; border-radius: 4px; }
         .msg.system { color: #888; font-style: italic; text-align: center; }
-        #chat-input-area { padding: 10px; border-top: 1px solid #eee; }
-        #chat-input { width: 90%; padding: 8px; }
+        #chat-input-area { padding: 10px; border-top: 1px solid #eee; display: flex; flex-direction: column; gap: 8px; }
+        #chat-input { width: 100%; padding: 8px; }
 
         /* UTILS */
         .color-swatch { width: 24px; height: 24px; border-radius: 50%; display: inline-block; cursor: pointer; border: 2px solid rgba(0,0,0,0.1); transition: transform 0.1s, border-color 0.1s; position: relative; }
@@ -102,7 +124,7 @@
         button.danger:hover { background: #f6e5e5; }
         .btn-icon { width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; }
         .btn-icon svg { width: 16px; height: 16px; display: block; fill: currentColor; }
-        .sound-controls { gap: 6px; display: flex; align-items: center; justify-content: space-between; }
+        .sound-controls { gap: 6px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; }
         #volume-slider { width: 110px; }
 
         #size-display { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #555; min-width: 60px; margin-right: 5px; }
@@ -171,6 +193,31 @@
         .ghost-option.compact { width: 34px; height: 34px; padding: 0; border-radius: 10px; }
         .ghost-swatch { width: 16px; height: 16px; border-radius: 50%; background: var(--ghost-body); border: 1px solid var(--ghost-border); }
         .ghost-option.active { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(75,121,207,0.18); background: #fff; transform: translateY(-1px); color: #1b2a4d; }
+        #username-input { font-size: 16px; }
+
+        @media (max-width: 1100px) {
+            #game-container { flex-wrap: wrap; align-content: flex-start; }
+            #main-area { order: 1; flex: 1 1 100%; }
+            #player-list { order: 2; flex: 1 1 240px; width: auto; max-height: 180px; }
+            #chat-panel { order: 3; flex: 1 1 320px; width: auto; min-height: 220px; }
+        }
+
+        @media (max-width: 760px) {
+            #header-bar { height: auto; padding: 8px 10px; gap: 6px 12px; flex-wrap: wrap; justify-content: center; }
+            #status-msg, #timer, #btn-start { position: static; }
+            #word-container { flex-basis: 100%; text-align: center; font-size: 24px; }
+            #status-msg { order: 1; font-size: 13px; }
+            #btn-start { order: 2; }
+            #timer { order: 3; font-size: 20px; }
+        }
+
+        @media (max-width: 720px) {
+            body { padding: 8px; gap: 8px; }
+            #game-container { flex-direction: column; flex-wrap: nowrap; }
+            #player-list, #chat-panel { width: 100%; max-height: 220px; }
+            #chat-input { font-size: 16px; }
+            #volume-slider { width: 100%; }
+        }
     </style>
     <script src="/socket.io/socket.io.js"></script>
 </head>
@@ -203,6 +250,13 @@
         <div class="box">
             <h2>Choose a Word</h2>
             <div id="word-options"></div>
+        </div>
+    </div>
+
+    <div id="round-over-banner" aria-live="polite" aria-atomic="true">
+        <div class="round-over-card">
+            <div class="round-over-title">ROUND OVER</div>
+            <div id="round-over-word" class="round-over-word"></div>
         </div>
     </div>
 
@@ -415,6 +469,7 @@
     let isGameRunning = false;
     let canStart = false;
     let hasSolved = false;
+    let roundOverCueTimeout = null;
 
     // --- CURSOR GHOSTS ---
     const cursorPositions = new Map();
@@ -830,6 +885,7 @@
     });
 
     socket.on('game_reset', (msg) => {
+        hideRoundOverCue();
         document.getElementById('status-msg').innerText = msg;
         currentDrawerId = null;
         isDrawer = false;
@@ -842,6 +898,7 @@
     });
 
     socket.on('choosing_word', (data) => {
+        hideRoundOverCue();
         resetRoundUI();
         updateDrawerState(data.drawerId);
         hasSolved = false;
@@ -872,6 +929,7 @@
     });
 
     socket.on('round_start', (data) => {
+        hideRoundOverCue();
         updateDrawerState(data.drawerId);
         isGameRunning = true;
         hasSolved = false;
@@ -935,7 +993,10 @@
         if (data.type === 'correct') {
             Sound.guessCorrect();
         } else if (data.type === 'system' && typeof data.text === 'string') {
-            if (data.text.startsWith('Round over!')) Sound.roundEnd();
+            if (data.text.startsWith('Round over!')) {
+                Sound.roundEnd();
+                showRoundOverCue(data.text);
+            }
             if (data.text.startsWith('Game over!')) Sound.gameEnd();
         }
     });
@@ -1214,8 +1275,22 @@
         return { x, y };
     };
 
-    canvas.addEventListener('mousedown', (e) => {
+    let activePointerId = null;
+
+    function startStroke(e) {
         if (!isDrawer) return;
+        if (e.pointerType && e.isPrimary === false) return;
+        if (typeof e.button === 'number' && e.button !== 0) return;
+        if (activePointerId !== null && e.pointerId != null && e.pointerId !== activePointerId) return;
+        if (e.pointerType && e.pointerType !== 'mouse') e.preventDefault();
+
+        if (e.pointerId != null && activePointerId === null) {
+            activePointerId = e.pointerId;
+            if (canvas.setPointerCapture) {
+                try { canvas.setPointerCapture(activePointerId); } catch (err) {}
+            }
+        }
+
         const { x, y } = getPos(e);
 
         if (state.tool === 'brush') {
@@ -1232,13 +1307,52 @@
             saveHistory();
             socket.emit('fill', { x: Math.floor(x), y: Math.floor(y), color: state.color });
         }
-    });
+    }
 
-    canvas.addEventListener('mousemove', (e) => {
-        if (state.isDrawing && state.tool === 'brush') draw(e);
-    });
+    function hideRoundOverCue() {
+        if (roundOverCueTimeout) {
+            clearTimeout(roundOverCueTimeout);
+            roundOverCueTimeout = null;
+        }
+        document.getElementById('round-over-banner').classList.remove('show');
+        document.getElementById('header-bar').classList.remove('round-over-state');
+        document.getElementById('status-msg').classList.remove('round-over-state');
+        document.getElementById('timer').classList.remove('round-over-state');
+    }
 
-    window.addEventListener('mouseup', () => {
+    function showRoundOverCue(systemText) {
+        hideRoundOverCue();
+        const prefix = 'Round over! The word was ';
+        const word = (typeof systemText === 'string' && systemText.startsWith(prefix))
+            ? systemText.slice(prefix.length).trim()
+            : '';
+        const bannerWord = document.getElementById('round-over-word');
+        bannerWord.innerText = word ? `The word was: ${word}` : 'Round complete';
+        document.getElementById('status-msg').innerText = word ? `Round over. Word: ${word}` : 'Round over.';
+        document.getElementById('round-over-banner').classList.add('show');
+        document.getElementById('header-bar').classList.add('round-over-state');
+        document.getElementById('status-msg').classList.add('round-over-state');
+        document.getElementById('timer').classList.add('round-over-state');
+
+        roundOverCueTimeout = setTimeout(() => {
+            hideRoundOverCue();
+        }, 2600);
+    }
+
+    function moveStroke(e) {
+        if (!state.isDrawing || state.tool !== 'brush') return;
+        if (activePointerId !== null && e.pointerId != null && e.pointerId !== activePointerId) return;
+        if (e.pointerType && e.pointerType !== 'mouse') e.preventDefault();
+        draw(e);
+    }
+
+    function endStroke(e) {
+        if (activePointerId !== null && e.pointerId != null && e.pointerId !== activePointerId) return;
+        if (activePointerId !== null && canvas.releasePointerCapture) {
+            try { canvas.releasePointerCapture(activePointerId); } catch (err) {}
+        }
+        activePointerId = null;
+
         if (!state.isDrawing) return;
         state.isDrawing = false;
 
@@ -1275,7 +1389,19 @@
         }
 
         saveHistory();
-    });
+    }
+
+    const supportsPointer = 'PointerEvent' in window;
+    if (supportsPointer) {
+        canvas.addEventListener('pointerdown', startStroke, { passive: false });
+        canvas.addEventListener('pointermove', moveStroke, { passive: false });
+        window.addEventListener('pointerup', endStroke);
+        window.addEventListener('pointercancel', endStroke);
+    } else {
+        canvas.addEventListener('mousedown', startStroke);
+        canvas.addEventListener('mousemove', moveStroke);
+        window.addEventListener('mouseup', endStroke);
+    }
 
     function draw(e) {
         if (!isDrawer) return;

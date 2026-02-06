@@ -234,11 +234,13 @@ io.on('connection', (socket) => {
     socket.on('chat_message', (msg) => {
         const player = players[socket.id];
         if (!player) return;
+        const text = typeof msg === "string" ? msg : String(msg ?? "");
+        const guess = text.trim().toUpperCase();
 
         // If it's a correct guess
-        if (isGameRunning && 
+        if (isGuessWindowOpen() &&
             socket.id !== drawerId && 
-            msg.trim().toUpperCase() === currentWord && 
+            guess === currentWord && 
             !guessedPlayers.includes(socket.id)) {
             
             // Handle Correct Guess
@@ -246,7 +248,9 @@ io.on('connection', (socket) => {
             const multiplier = DIFFICULTY_MULTIPLIER[currentDifficulty] || 1;
             const points = Math.ceil(basePoints * multiplier);
             player.score += points;
-            players[drawerId].score += 5; // Drawer gets points too
+            if (players[drawerId]) {
+                players[drawerId].score += 5; // Drawer gets points too
+            }
             guessedPlayers.push(socket.id);
 
             io.emit('update_player_list', Object.values(players));
@@ -269,7 +273,7 @@ io.on('connection', (socket) => {
             // Normal Chat
             io.emit('chat_message', { 
                 name: player.name, 
-                text: msg, 
+                text, 
                 type: 'normal' 
             });
         }
@@ -355,6 +359,15 @@ function startNewRound() {
     io.emit('clear_canvas');
     io.emit('choosing_word', { drawerId }); // Tell everyone someone is choosing
     io.to(drawerId).emit('choose_word', { drawerId, words: currentOptions, canCustom }); // Show modal to drawer
+}
+
+function isGuessWindowOpen() {
+    return isGameRunning &&
+        !roundEnding &&
+        !!drawerId &&
+        !!currentWord &&
+        roundTime > 0 &&
+        currentOptions.length === 0;
 }
 
 function endRound() {
